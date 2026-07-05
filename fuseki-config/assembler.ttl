@@ -1,17 +1,17 @@
 @prefix :        <http://base/#> .
 @prefix fuseki:  <http://jena.apache.org/fuseki#> .
 @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
-@prefix tdb:     <http://jena.hpl.hp.com/2008/tdb#> .
+@prefix tdb2:    <http://jena.apache.org/2016/tdb2#> .
 
 [] ja:loadClass "org.apache.jena.fuseki.main.FusekiServer" .
 
-# Dataset - uses existing TDB data at /fuseki
+# Dataset - uses existing TDB2 data at /fuseki
 :dataset a ja:RDFDataset ;
     ja:defaultGraph :graph ;
     .
 
-:graph a tdb:DatasetTDB2 ;
-    tdb:location "/fuseki" ;
+:graph a tdb2:DatasetTDB2 ;
+    tdb2:location "/fuseki" ;
     .
 
 # Service with GSP enabled (required for add/edit data in UI)
