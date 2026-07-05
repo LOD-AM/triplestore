@@ -40,6 +40,19 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
 - **Persistent storage**: Fuseki data is stored in a Docker volume (`fuseki_data`)
 - **Custom configs**: Mount your `config.ttl` or `shiro.ini` in `./fuseki-config/`
 - **Watchtower**: Monitors and updates containers automatically, sends email notifications on updates
+- **Reasoning**: Currently **disabled** - AFO and CIDOC CRM will be implemented directly without inference mappings
+
+## Fuseki Configuration File
+
+The repository includes a minimal `fuseki-config/config.ttl` that:
+- Uses the existing TDB database at `/fuseki`
+- Enables **Graph Store Protocol (GSP)** for data upload/edit in the UI
+- **Excludes reasoning** (no RDFS/OWL inference)
+
+To apply configuration changes:
+```bash
+sudo -E docker compose down && sudo -E docker compose up -d
+```
 
 ## Environment Variables
 
