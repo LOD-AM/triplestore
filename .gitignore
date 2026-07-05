@@ -1,8 +1,9 @@
 # Docker
 .docker/
 
-# Fuseki config (may contain sensitive data)
-fuseki-config/
+# Fuseki data and config (contain sensitive/large files)
+fuseki-data/
+fuseki-config/shiro.ini
 
 # Local overrides
 .env
