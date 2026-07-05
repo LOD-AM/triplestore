@@ -7,7 +7,7 @@ services:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD?err}
       - JAVA_OPTS=${FUSEKI_JAVA_OPTS:--Xmx4G}
     volumes:
-      - fuseki_data:/fuseki
+      - fuseki_data:/fuseki-base/databases
       - ./fuseki-config:/fuseki-base/configuration
     ports:
       - "3030:3030"
