@@ -9,7 +9,7 @@
     fuseki:name        "LOD-AM" ;
     fuseki:dataset     :tdb ;
     fuseki:serviceQuery    "sparql" , "query" ;
-    fuseki:serviceReadWrite "data" , "update" , "upload" .
+    fuseki:serviceReadWriteGraphStore "data" .
 
 :tdb a tdb:DatasetTDB ;
     tdb:location "/fuseki-base/databases/tdb" .
