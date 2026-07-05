@@ -1,0 +1,22 @@
+@prefix :        <http://base/#> .
+@prefix fuseki:  <http://jena.apache.org/fuseki#> .
+@prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
+@prefix tdb:     <http://jena.hpl.hp.com/2008/tdb#> .
+
+[] ja:loadClass "org.apache.jena.fuseki.main.FusekiServer" .
+
+# Dataset - uses existing TDB data at /fuseki
+:dataset a ja:RDFDataset ;
+    ja:defaultGraph :graph ;
+    .
+
+:graph a tdb:DatasetTDB2 ;
+    tdb:location "/fuseki" ;
+    .
+
+# Service with GSP enabled (required for add/edit data in UI)
+:service a fuseki:Service ;
+    fuseki:name        "LOD-AM" ;
+    fuseki:dataset     :dataset ;
+    fuseki:serviceQuery    "sparql" , "query" ;
+    fuseki:serviceReadWrite "data" , "update" , "upload" .
