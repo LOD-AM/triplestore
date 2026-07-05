@@ -1,0 +1,41 @@
+services:
+  fuseki:
+    image: secoresearch/fuseki
+    container_name: lod-am-fuseki
+    restart: unless-stopped
+    environment:
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD?err}
+      - JAVA_OPTS=${FUSEKI_JAVA_OPTS:--Xmx4G}
+    volumes:
+      - fuseki_data:/fuseki
+      - ./fuseki-config:/fuseki/config:ro
+    ports:
+      - "3030:3030"
+    networks:
+      - lod-am-network
+
+  watchtower:
+    image: nickfedor/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - WATCHTOWER_NOTIFICATIONS=${WATCHTOWER_NOTIFICATIONS:-email}
+      - WATCHTOWER_NOTIFICATION_EMAIL_FROM=${WATCHTOWER_NOTIFICATION_EMAIL_FROM?err}
+      - WATCHTOWER_NOTIFICATION_EMAIL_TO=${WATCHTOWER_NOTIFICATION_EMAIL_TO?err}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER?err}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT?err}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER:-}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD?err}
+      - WATCHTOWER_NOTIFICATION_EMAIL_DELAY=${WATCHTOWER_NOTIFICATION_EMAIL_DELAY:-2}
+    command: --interval 3600
+    networks:
+      - lod-am-network
+
+volumes:
+  fuseki_data:
+
+networks:
+  lod-am-network:
+    driver: bridge
