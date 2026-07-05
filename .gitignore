@@ -1,0 +1,21 @@
+# Docker
+.docker/
+
+# Fuseki config (may contain sensitive data)
+fuseki-config/
+
+# Local overrides
+.env
+.docker-compose.override.yml
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# OS
+*.swp
+*.swo
