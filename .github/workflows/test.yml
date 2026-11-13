@@ -1,0 +1,53 @@
+name: test
+
+# Starts the real Fuseki container with this repo's config, loads the
+# knowledge-graph data and runs the smoke test (health, public query,
+# write protection).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuseki:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: LOD-AM/knowledge-graph
+          path: knowledge-graph
+
+      - name: Config files are valid
+        run: |
+          cp .env.example .env
+          sed -i 's/^FUSEKI_ADMIN_PASSWORD=.*/FUSEKI_ADMIN_PASSWORD=ci-test-password/' .env
+          docker compose config -q
+          pip install --quiet rdflib
+          python3 -c "import rdflib; rdflib.Graph().parse('fuseki-config/assembler.ttl')"
+
+      - name: Start Fuseki
+        run: |
+          mkdir -p fuseki-data
+          sudo chown -R 9008:9008 fuseki-data fuseki-config
+          docker compose up -d fuseki
+          for i in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' lod-am-fuseki)" = healthy ] && break
+            sleep 3
+          done
+          docker inspect -f 'health: {{.State.Health.Status}}' lod-am-fuseki
+          docker logs lod-am-fuseki 2>&1 | tail -20
+
+      - name: Load knowledge-graph data
+        run: scripts/load.sh --replace knowledge-graph/data knowledge-graph/examples
+
+      - name: Smoke test
+        run: scripts/smoke_test.sh --min-triples 100
+
+      - name: Fuseki log on failure
+        if: failure()
+        run: docker logs lod-am-fuseki
