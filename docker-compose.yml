@@ -1,33 +1,47 @@
+# LOD-AM triplestore. Configuration comes from ./.env (see .env.example);
+# docker compose reads it automatically, no exports or `sudo -E` needed.
 services:
   fuseki:
-    image: secoresearch/fuseki
+    # Pinned: update via Dependabot PRs. Version = Apache Jena Fuseki version.
+    image: secoresearch/fuseki:6.2.0
     container_name: lod-am-fuseki
     restart: unless-stopped
     environment:
-      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD?err}
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD:?set FUSEKI_ADMIN_PASSWORD in .env}
       - JAVA_OPTS=${FUSEKI_JAVA_OPTS:--Xmx4G}
     volumes:
       - ./fuseki-data:/fuseki-base/databases
       - ./fuseki-config:/fuseki-base/configuration
+      # Access control. Mounted where the image keeps its template: the
+      # entrypoint copies it to /fuseki-base/shiro.ini and sets the password.
+      - ./shiro.ini:/jena-fuseki/shiro.ini:ro
     ports:
       - "3030:3030"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3030/$$/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     networks:
       - lod-am-network
 
   watchtower:
-    image: nickfedor/watchtower
+    # Pinned as well: with fixed tags Watchtower only picks up rebuilds of the
+    # same version (e.g. base-image security fixes), not new versions.
+    image: nickfedor/watchtower:1.24.0
     container_name: watchtower
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - WATCHTOWER_NOTIFICATIONS=${WATCHTOWER_NOTIFICATIONS:-email}
-      - WATCHTOWER_NOTIFICATION_EMAIL_FROM=${WATCHTOWER_NOTIFICATION_EMAIL_FROM?err}
-      - WATCHTOWER_NOTIFICATION_EMAIL_TO=${WATCHTOWER_NOTIFICATION_EMAIL_TO?err}
-      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER?err}
-      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT?err}
+      - WATCHTOWER_NOTIFICATION_EMAIL_FROM=${WATCHTOWER_NOTIFICATION_EMAIL_FROM:?set in .env}
+      - WATCHTOWER_NOTIFICATION_EMAIL_TO=${WATCHTOWER_NOTIFICATION_EMAIL_TO:?set in .env}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER:?set in .env}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT:?set in .env}
       - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER:-}
-      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD?err}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD:?set in .env}
       - WATCHTOWER_NOTIFICATION_EMAIL_DELAY=${WATCHTOWER_NOTIFICATION_EMAIL_DELAY:-2}
     command: --interval 3600
     networks:
