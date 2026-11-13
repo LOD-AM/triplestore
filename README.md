@@ -13,42 +13,54 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
    sudo chown -R 9008:9008 fuseki-data/ fuseki-config/
    ```
 
-2. **Set environment variables in your `~/.bashrc`:**
+2. **Create `.env` from the template and fill in real values:**
    ```bash
-   # Fuseki
-   export FUSEKI_ADMIN_PASSWORD="your_secure_password"
-   export FUSEKI_JAVA_OPTS="-Xmx4G"  # Optional: JVM memory settings
+   cp .env.example .env && chmod 600 .env
+   nano .env
+   ```
+   `docker compose` reads `.env` automatically, so there is no need for exports in `~/.bashrc` or `sudo -E`.
 
-   # Watchtower Email Notifications
-   export WATCHTOWER_NOTIFICATIONS=email
-   export WATCHTOWER_NOTIFICATION_EMAIL_FROM="watchtower@yourdomain.com"
-   export WATCHTOWER_NOTIFICATION_EMAIL_TO="admin@yourdomain.com"
-   export WATCHTOWER_NOTIFICATION_EMAIL_SERVER="smtp.yourdomain.com"
-   export WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=587
-   export WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER="smtp_user"
-   export WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD="smtp_password"
-   export WATCHTOWER_NOTIFICATION_EMAIL_DELAY=2  # Optional: default is 2
+3. **Start the services:**
+   ```bash
+   sudo docker compose up -d
    ```
 
-3. **Source your .bashrc:**
+4. **Check it:**
    ```bash
-   source ~/.bashrc
+   scripts/smoke_test.sh      # health, public query, write protection
    ```
-
-4. **Start the services:**
-   ```bash
-   sudo -E docker compose up -d
-   ```
-
-5. **Access Fuseki:**
    - Web UI: http://localhost:3030
-   - SPARQL endpoint: http://localhost:3030/LOD-AM/sparql
+   - SPARQL endpoint (public, read-only): http://localhost:3030/LOD-AM/sparql
+   - Graph Store (read-write, **admin login required**): http://localhost:3030/LOD-AM/data
+
+5. **Load the knowledge graph** (from a checkout of [LOD-AM/knowledge-graph](https://github.com/LOD-AM/knowledge-graph)):
+   ```bash
+   scripts/load.sh --replace ../knowledge-graph/data ../knowledge-graph/examples
+   ```
+   `--replace` empties the default graph first, so the store then holds exactly these files.
+
+## Access control
+
+`shiro.ini` (versioned, no secrets) defines who may do what:
+
+| Path | Access |
+|---|---|
+| `/LOD-AM/sparql`, `/LOD-AM/query` | public (SPARQL query only) |
+| `/LOD-AM/data`, `/LOD-AM` (dataset URL) | admin login (these accept writes) |
+| `/$/…` (admin UI/API) | admin login, except `/$/ping` and `/$/status` |
+| web UI static files | public |
+
+The admin password comes from `FUSEKI_ADMIN_PASSWORD`. The image's entrypoint
+writes it into the `admin=` line when the container is created. After changing
+`shiro.ini` or the password, recreate the container:
+`sudo docker compose up -d --force-recreate fuseki`.
 
 ## Configuration
 
 - **Persistent storage**: Fuseki data is stored in `./fuseki-data/` (bind mount to `/fuseki-base/databases`)
-- **Custom configs**: Mount your `assembler.ttl` or `shiro.ini` in `./fuseki-config/` (bind mount to `/fuseki-base/configuration`)
-- **Watchtower**: Monitors and updates containers automatically, sends email notifications on updates
+- **Custom configs**: `assembler.ttl` lives in `./fuseki-config/` (bind mount to `/fuseki-base/configuration`); `./shiro.ini` is mounted read-only as the image's shiro template
+- **Versions**: images are pinned in `docker-compose.yml`; Dependabot opens PRs for new versions. Watchtower only picks up rebuilds of the pinned tags and sends email notifications. Note that Watchtower watches *all* containers on the host.
+- **Healthcheck**: Docker marks `lod-am-fuseki` healthy when `/$/ping` answers
 - **Reasoning**: Currently **disabled** - AFO and CIDOC CRM will be implemented directly without inference mappings
 
 ## Fuseki Configuration File
@@ -63,10 +75,12 @@ The repository includes a minimal `fuseki-config/assembler.ttl` that:
 
 To apply configuration changes:
 ```bash
-sudo -E docker compose down && sudo -E docker compose up -d
+sudo docker compose down && sudo docker compose up -d
 ```
 
 ## Environment Variables
+
+Set in `.env` (template: `.env.example`).
 
 ### Fuseki
 
@@ -97,17 +111,18 @@ sudo -E docker compose down && sudo -E docker compose up -d
 ## Troubleshooting
 
 ### Environment variables not set
-If you see `The "VARIABLE" variable is not set`, use `sudo -E` to preserve your environment:
-```bash
-sudo -E docker compose up -d
-```
-Or configure sudo to keep specific variables:
-```bash
-echo 'Defaults env_keep += "FUSEKI_ADMIN_PASSWORD FUSEKI_JAVA_OPTS WATCHTOWER_*"' | sudo tee /etc/sudoers.d/env_keep
-```
+If you see `set FUSEKI_ADMIN_PASSWORD in .env` (or a similar message), `.env` is missing or incomplete.
+Copy `.env.example` to `.env` in this directory and fill it in.
 
 ### Permission denied errors
 The secoresearch/fuseki container runs as UID 9008. If you see `Not writable` errors, ensure both directories have correct ownership:
 ```bash
 sudo chown -R 9008:9008 fuseki-data/ fuseki-config/
 ```
+
+## Tests
+
+CI (`.github/workflows/test.yml`) starts the real container with this
+configuration, loads the knowledge-graph data and runs `scripts/smoke_test.sh`.
+The smoke test never writes: its write probe sends invalid Turtle, so it is
+safe to run against production.
