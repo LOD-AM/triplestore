@@ -40,6 +40,7 @@ are only verified once the owner has deployed them (`sudo -E docker compose down
 - No healthcheck, no load script for knowledge-graph data, no CI.
 
 ## LOD-AM project (shared block: keep identical in every repo)
+Source of truth: knowledge-graph `CLAUDE.md`. Edit it there first, then copy it unchanged; CI (`scripts/check_shared_block.sh`) fails on drift.
 LOD-AM = Linked Open Data for Ancient Metallurgy, a one-person research project (https://lod-am.net).
 - `LOD-AM/knowledge-graph`: data model, vocabularies, converters, data. **Authority for all modelling rules** (`CONVENTIONS.md`).
 - `LOD-AM/triplestore`: Apache Jena Fuseki (Docker) that serves the knowledge graph.

@@ -1,0 +1,21 @@
+name: shared-rules
+
+# CLAUDE.md must end with the same "LOD-AM project" block as
+# LOD-AM/knowledge-graph. Weekly run catches changes made there.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shared-block:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check_shared_block.sh
