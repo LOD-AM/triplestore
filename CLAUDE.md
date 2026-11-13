@@ -3,6 +3,9 @@
 Docker Compose deployment of the LOD-AM triplestore on the owner's homelab
 server: Apache Jena Fuseki (`secoresearch/fuseki` image) plus Watchtower for
 automatic image updates. It serves the data from `LOD-AM/knowledge-graph`.
+Public name `triple.lod-am.net`, behind the owner's Nginx Proxy Manager, which
+currently requires authentication for everything (querying is meant to become
+public later).
 
 ## Files
 - `docker-compose.yml`: services `fuseki` (port 3030, network `lod-am-network`) and `watchtower`
@@ -45,10 +48,16 @@ running server are only verified once the owner has deployed them
 - Images are pinned. Version bumps come as Dependabot PRs: check the Jena
   release notes (TDB1 is still used) and let CI pass before merging.
 
-## Known issues (planned work)
-- No backups of `fuseki-data/` yet.
-- Port 3030 is published on all interfaces; no reverse proxy/TLS in this repo.
-- Watchtower watches every container on the host, not just these two.
+## Where to resume (state 2026-11-13)
+- **#3, owner-side: redeploy with the secured config from #1.** Until then the
+  server runs the old setup, where Fuseki itself accepts anonymous writes
+  (only the proxy authentication protects it). Steps and rollback are in #3.
+- #4 backups of `fuseki-data/` · #5 publish port 3030 only on localhost behind
+  the proxy · #6 Watchtower watches every container on the host.
+- Before querying goes public: #3 and #5 done, the proxy authenticates only
+  writes/admin, and the website privacy policy covers `triple.lod-am.net`
+  (LOD-AM/website#20).
+- Dependabot PRs: check the Jena release notes (TDB1) and let CI pass.
 
 ## LOD-AM project (shared block: keep identical in every repo)
 Source of truth: knowledge-graph `CLAUDE.md`. Edit it there first, then copy it unchanged; CI (`scripts/check_shared_block.sh`) fails on drift.
@@ -65,3 +74,5 @@ Rules for every repo:
 - Never commit secrets (passwords, SMTP credentials, `.env`, `shiro.ini`).
 - English for code, docs and commits. Keep commits small and explain *why*.
 - Verify before you claim: run the repo's checks and report what you ran.
+- Open work lives in each repo's GitHub issues; each CLAUDE.md has a "Where to resume"
+  section. The owner merges PRs; after a merge, start new work from the updated `main`.
