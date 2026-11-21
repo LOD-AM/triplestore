@@ -6,16 +6,25 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
 
 ## Quick Start
 
-1. **Create the data folder and hand both folders to Fuseki (required, before the first start):**
+1. **Set up the two folders Fuseki uses (required, before the first start):**
    ```bash
    mkdir -p fuseki-data
-   sudo chown -R 9008:9008 fuseki-data fuseki-config
-   ls -ldn fuseki-data fuseki-config    # both lines must show 9008 9008
+   sudo chown -R 9008:9008 fuseki-data
+   sudo chown -R "$USER":9008 fuseki-config && sudo chmod 2775 fuseki-config
+   ls -ldn fuseki-data fuseki-config
    ```
-   Fuseki runs as UID 9008 and must be able to write to both. This applies to every
-   fresh clone: `fuseki-data/` isn't in git. If the folder is missing, `docker compose up`
-   stops with `bind source path does not exist`; if it belongs to someone else, Fuseki
-   restarts in a loop (see Troubleshooting).
+   `fuseki-data` must show `drwx… 9008 9008`, and `fuseki-config` must show
+   `drwxrwsr-x <your uid> 9008`.
+   Fuseki runs as UID 9008 and needs write access to both: to the database, and to
+   the config folder, because it refuses to start otherwise (it writes nothing there).
+   - `fuseki-data/` belongs to Fuseki.
+   - `fuseki-config/` stays **yours**, so `git pull` can update `assembler.ttl`.
+     Fuseki gets write access through group 9008 (`group_add` in `docker-compose.yml`).
+     The `s` bit (`2775`) gives files that git creates there the same group.
+
+   This applies to every fresh clone: `fuseki-data/` isn't in git. If the folder is
+   missing, `docker compose up` stops with `bind source path does not exist`; with
+   the wrong owner, Fuseki restarts in a loop (see Troubleshooting).
 
 2. **Create `.env` from the template and fill in real values:**
    ```bash
@@ -209,8 +218,19 @@ Copy `.env.example` to `.env` in this directory and fill it in.
 `FusekiConfigException: Not writable: /fuseki-base/databases`.
 The container runs as UID 9008 and can't write to the folder. Fix the ownership and recreate:
 ```bash
-sudo chown -R 9008:9008 fuseki-data fuseki-config
+sudo chown -R 9008:9008 fuseki-data
 sudo docker compose up -d --force-recreate fuseki
+```
+The same error with `/fuseki-base/configuration` means `fuseki-config/` lacks
+group write for 9008. Use the `fuseki-config` line of Quick Start step 1, then recreate.
+
+### `git pull`: `unable to unlink old 'fuseki-config/assembler.ttl': Permission denied`
+`fuseki-config/` still belongs to UID 9008 (the setup before 2026-11-21). Give it
+back to your user with group access for Fuseki (Quick Start step 1), then pull again:
+```bash
+sudo chown -R "$USER":9008 fuseki-config && sudo chmod 2775 fuseki-config
+git status    # if the failed pull left changes: git checkout -- .
+git pull
 ```
 
 ## Tests

@@ -6,6 +6,12 @@ services:
     image: secoresearch/fuseki:6.2.0
     container_name: lod-am-fuseki
     restart: unless-stopped
+    # The image runs as UID 9008 with group 0. Group 9008 lets it write to
+    # fuseki-config/, which Fuseki requires at start ("Not writable"), while
+    # the folder and its files stay owned by the checkout's user, so git pull
+    # can replace assembler.ttl (README, Quick Start step 1).
+    group_add:
+      - "9008"
     environment:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD:?set FUSEKI_ADMIN_PASSWORD in .env}
       - JAVA_OPTS=${FUSEKI_JAVA_OPTS:--Xmx4G}
