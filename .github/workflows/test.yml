@@ -56,6 +56,35 @@ jobs:
       - name: Smoke test
         run: scripts/smoke_test.sh --min-triples 100
 
+      # planning#31: --replace leaves deleted labels in the text index;
+      # scripts/reindex.sh must remove them.
+      - name: Text index is rebuilt by reindex.sh
+        run: |
+          hits() { curl -s -G -H 'Accept: text/csv' --data-urlencode \
+            "query=PREFIX text: <http://jena.apache.org/text#> SELECT (COUNT(*) AS ?n) WHERE { (?s ?sc ?l) text:query (\"$1\") }" \
+            http://localhost:3030/LOD-AM/sparql | tail -n 1 | tr -d '\r'; }
+          printf '<urn:x:stale> <http://www.w3.org/2000/01/rdf-schema#label> "Zzstalelabel"@en .\n' > /tmp/stale.ttl
+          scripts/load.sh /tmp/stale.ttl
+          test "$(hits zzstalelabel)" = 1 && echo "ok: new label indexed on load"
+          scripts/load.sh --replace knowledge-graph/data knowledge-graph/examples
+          echo "stale hits after --replace: $(hits zzstalelabel)"
+          scripts/reindex.sh
+          test "$(hits zzstalelabel)" = 0 && echo "ok: stale label gone after reindex"
+          test "$(hits 'spear*')" -ge 1 && echo "ok: knowledge-graph labels found after reindex"
+          scripts/smoke_test.sh --min-triples 100
+
+      # planning#30: 10 s to the first result. A cross join over all triples
+      # takes far longer, so it must be cut off with 503 after about 10 s.
+      - name: A slow query is stopped by the timeout
+        run: |
+          start=$(date +%s)
+          code=$(curl -s -o /tmp/slow.txt -w '%{http_code}' --max-time 90 -G -H 'Accept: text/csv' \
+            --data-urlencode 'query=SELECT (COUNT(*) AS ?n) WHERE { ?a ?b ?c . ?d ?e ?f . ?g ?h ?i }' \
+            http://localhost:3030/LOD-AM/sparql || true)
+          took=$(( $(date +%s) - start ))
+          echo "http $code after ${took}s: $(head -c 100 /tmp/slow.txt)"
+          test "$code" = 503 && test "$took" -ge 9 && test "$took" -le 30
+
       - name: Fuseki log on failure
         if: failure()
         run: docker logs lod-am-fuseki
