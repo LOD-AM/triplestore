@@ -51,10 +51,12 @@ running server are only verified once the owner has deployed them
 ## Where to resume (state 2026-11-21)
 - **#3, owner-side: redeploy with the secured config from #1.** Until then the
   server runs the old setup, where Fuseki itself accepts anonymous writes
-  (only the proxy authentication protects it). Steps and rollback are in #3.
+  (only the proxy authentication protects it; since 2026-11-21 the Proxmox firewall
+  lets only the proxy reach port 3030, LOD-AM/planning#29). Steps and rollback are in #3.
 - Server decisions (owner, 2026-11-21; README "Server setup"): a dedicated LXC on Proxmox that runs only this
   stack, so Watchtower stays host-wide (#6); the proxy runs on another VM, so port 3030 can't be
-  localhost-only and `shiro.ini` is what protects writes (#5; restricting 3030 to the proxy: LOD-AM/planning#29); no triplestore backups, the
+  localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
+  (LOD-AM/planning#29, ACCEPT above DROP); no triplestore backups, the
   sources are the relational DB and knowledge-graph plus the whole-machine backup, restore = reload (#4).
 - Before querying goes public: #3 done, the proxy authenticates only writes/admin, and the
   website privacy policy covers `triple.lod-am.net` (LOD-AM/website#20).
