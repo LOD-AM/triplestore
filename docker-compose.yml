@@ -10,8 +10,20 @@ services:
       - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD:?set FUSEKI_ADMIN_PASSWORD in .env}
       - JAVA_OPTS=${FUSEKI_JAVA_OPTS:--Xmx4G}
     volumes:
-      - ./fuseki-data:/fuseki-base/databases
-      - ./fuseki-config:/fuseki-base/configuration
+      # Both folders must exist and belong to UID 9008 before the first start
+      # (README, Quick Start). create_host_path: false makes a missing folder an
+      # error at start instead of Docker creating it as root, which made Fuseki
+      # exit with "Not writable: /fuseki-base/databases" in a restart loop.
+      - type: bind
+        source: ./fuseki-data
+        target: /fuseki-base/databases
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./fuseki-config
+        target: /fuseki-base/configuration
+        bind:
+          create_host_path: false
       # Access control. Mounted where the image keeps its template: the
       # entrypoint copies it to /fuseki-base/shiro.ini and sets the password.
       - ./shiro.ini:/jena-fuseki/shiro.ini:ro

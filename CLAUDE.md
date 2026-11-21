@@ -49,16 +49,21 @@ running server are only verified once the owner has deployed them
   release notes (TDB1 is still used) and let CI pass before merging.
 
 ## Where to resume (state 2026-11-21)
-- **#3, owner-side: redeploy with the secured config from #1.** Until then the
-  server runs the old setup, where Fuseki itself accepts anonymous writes
-  (only the proxy authentication protects it; since 2026-11-21 the Proxmox firewall
-  lets only the proxy reach port 3030, LOD-AM/planning#29). Steps and rollback are in #3.
+- **#3 redeployed (2026-11-21):** fresh clone in `~/triplestore` on the LXC, `.env` in use,
+  Fuseki 6.2.0 with the secured `shiro.ini`; knowledge-graph `data/` + `examples/` loaded
+  (664 triples), `scripts/smoke_test.sh --min-triples 664` passed on the server. The old checkout
+  (with the old database) is kept as `~/triplestore-old` for rollback until the owner removes it.
+  All checks in #3 done by the owner (web UI asks for the login, `.bashrc` exports removed, Dependabot active).
+- Pitfall seen on the redeploy: Docker created the missing `fuseki-data/` as root, so Fuseki
+  exited with `Not writable: /fuseki-base/databases` in a restart loop. Now `create_host_path: false`
+  in `docker-compose.yml` refuses to start without the folder; the `chown` step is still needed
+  (README Quick Start, Troubleshooting).
 - Server decisions (owner, 2026-11-21; README "Server setup"): a dedicated LXC on Proxmox that runs only this
   stack, so Watchtower stays host-wide (#6); the proxy runs on another VM, so port 3030 can't be
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
   (LOD-AM/planning#29, ACCEPT above DROP); no triplestore backups, the
   sources are the relational DB and knowledge-graph plus the whole-machine backup, restore = reload (#4).
-- Before querying goes public: #3 done, the proxy authenticates only writes/admin, and the
+- Before querying goes public: the proxy authenticates only writes/admin, and the
   website privacy policy covers `triple.lod-am.net` (LOD-AM/website#20).
 - Dependabot PRs: check the Jena release notes (TDB1) and let CI pass.
 

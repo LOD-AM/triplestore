@@ -6,12 +6,16 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
 
 ## Quick Start
 
-1. **Create local directories and set permissions:**
+1. **Create the data folder and hand both folders to Fuseki (required, before the first start):**
    ```bash
-   mkdir -p fuseki-data fuseki-config
-   # Fuseki runs as UID 9008 - grant write access
-   sudo chown -R 9008:9008 fuseki-data/ fuseki-config/
+   mkdir -p fuseki-data
+   sudo chown -R 9008:9008 fuseki-data fuseki-config
+   ls -ldn fuseki-data fuseki-config    # both lines must show 9008 9008
    ```
+   Fuseki runs as UID 9008 and must be able to write to both. This applies to every
+   fresh clone: `fuseki-data/` isn't in git. If the folder is missing, `docker compose up`
+   stops with `bind source path does not exist`; if it belongs to someone else, Fuseki
+   restarts in a loop (see Troubleshooting).
 
 2. **Create `.env` from the template and fill in real values:**
    ```bash
@@ -150,10 +154,17 @@ Decisions for the production server (triple.lod-am.net), with the issues they co
 If you see `set FUSEKI_ADMIN_PASSWORD in .env` (or a similar message), `.env` is missing or incomplete.
 Copy `.env.example` to `.env` in this directory and fill it in.
 
-### Permission denied errors
-The secoresearch/fuseki container runs as UID 9008. If you see `Not writable` errors, ensure both directories have correct ownership:
+### `bind source path does not exist`
+`fuseki-data/` (or `fuseki-config/`) is missing, typically in a fresh clone. Do step 1 of the Quick Start, then `sudo docker compose up -d`.
+
+### Fuseki restarts in a loop / `Not writable`
+`docker ps` shows `Restarting (1)` or the health status `unhealthy`, and
+`sudo docker logs --tail 30 lod-am-fuseki` shows
+`FusekiConfigException: Not writable: /fuseki-base/databases`.
+The container runs as UID 9008 and can't write to the folder. Fix the ownership and recreate:
 ```bash
-sudo chown -R 9008:9008 fuseki-data/ fuseki-config/
+sudo chown -R 9008:9008 fuseki-data fuseki-config
+sudo docker compose up -d --force-recreate fuseki
 ```
 
 ## Tests
