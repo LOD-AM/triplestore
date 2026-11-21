@@ -1,15 +1,55 @@
 @prefix :        <http://base/#> .
 @prefix fuseki:  <http://jena.apache.org/fuseki#> .
 @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
 @prefix tdb:     <http://jena.hpl.hp.com/2008/tdb#> .
+@prefix text:    <http://jena.apache.org/text#> .
 
 [] ja:loadClass "org.apache.jena.fuseki.main.FusekiServer" .
+[] ja:loadClass "org.apache.jena.query.text.TextQuery" .
+text:TextDataset      rdfs:subClassOf  ja:RDFDataset .
+text:TextIndexLucene  rdfs:subClassOf  text:TextIndex .
 
 :service a fuseki:Service ;
     fuseki:name        "LOD-AM" ;
-    fuseki:dataset     :tdb ;
+    fuseki:dataset     :text ;
     fuseki:serviceQuery    "sparql" , "query" ;
     fuseki:serviceReadWriteGraphStore "data" .
 
+# Query timeout (LOD-AM/planning#30): 10 s to the first result, 120 s overall.
+# It must sit on the dataset the service uses: Fuseki 6.2.0 as the image starts
+# it reads neither the image's $FUSEKI_BASE/config.ttl (so its QUERY_TIMEOUT
+# variable has no effect) nor ja:context on the fuseki:Service.
+# After the first limit the client gets 503; after the second, results already
+# streamed end with a "Query cancelled due to timeout" note.
+:text a text:TextDataset ;
+    text:dataset :tdb ;
+    text:index   :lucene ;
+    ja:context [ ja:cxtName "arq:queryTimeout" ; ja:cxtValue "10000,120000" ] .
+
 :tdb a tdb:DatasetTDB ;
     tdb:location "/fuseki-base/databases/tdb" .
+
+# Full-text index over labels (LOD-AM/planning#31), for SPARQL like
+#   (?s ?score ?label) text:query (rdfs:label "spear*" "lang:en")
+# One field for all languages, Lucene's standard analyzer (no stemming).
+# Writes through the Graph Store keep it up to date; the uid field lets deletes
+# (and the clear in `scripts/load.sh --replace`) remove entries too.
+# The index lives next to TDB in the fuseki-data bind mount and can be deleted
+# and rebuilt at any time (README, Text search).
+:lucene a text:TextIndexLucene ;
+    text:directory <file:/fuseki-base/databases/lucene> ;
+    text:storeValues true ;
+    text:entityMap :entityMap .
+
+:entityMap a text:EntityMap ;
+    text:entityField  "uri" ;
+    text:defaultField "label" ;
+    text:uidField     "uid" ;
+    text:langField    "lang" ;
+    text:map (
+        [ text:field "label" ; text:predicate rdfs:label ]
+        [ text:field "label" ; text:predicate skos:prefLabel ]
+        [ text:field "label" ; text:predicate skos:altLabel ]
+    ) .

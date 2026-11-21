@@ -11,11 +11,16 @@ public later).
 - `docker-compose.yml`: services `fuseki` (port 3030, network `lod-am-network`) and `watchtower`
 - `fuseki-config/assembler.ttl`: dataset **LOD-AM**, TDB1 at `/fuseki-base/databases/tdb`,
   endpoints `/LOD-AM/sparql` + `/LOD-AM/query` (read) and `/LOD-AM/data` (Graph Store, **read-write**). No reasoning.
+  Wrapped in a `text:TextDataset` (Lucene label index at `/fuseki-base/databases/lucene`, planning#31) that also
+  carries the query timeout `10000,120000` (planning#30). The timeout must stay on that dataset: the image's
+  `QUERY_TIMEOUT`/`config.ttl` and `ja:context` on the service have no effect (tested with the 6.2.0 jar).
 - `shiro.ini`: access control (versioned, no secrets). Mounted at `/jena-fuseki/shiro.ini` (the image's template);
   the entrypoint copies it to `/fuseki-base/shiro.ini` and rewrites the `admin=` line. Keep that line as `admin=...` with no spaces.
   Query endpoints are public; `/LOD-AM/data`, `/LOD-AM` and `/$/**` need the admin login.
 - `.env` (gitignored, server-only; template `.env.example`): secrets and settings. `fuseki-data/` (gitignored): the database (not backed up; reload from the sources)
-- `scripts/load.sh`: load Turtle via the Graph Store; `scripts/smoke_test.sh`: health, public query, write protection (never writes)
+- `scripts/load.sh`: load Turtle via the Graph Store; `scripts/smoke_test.sh`: health, public query, write protection,
+  text search (never writes); `scripts/reindex.sh`: rebuild the text index (stops Fuseki briefly). Needed after
+  `load.sh --replace`, because clearing a graph leaves its labels in the index
 
 ## Checks (no Docker daemon in cloud sessions)
 CI (`test.yml`) runs the real container, loads knowledge-graph and runs the smoke test.

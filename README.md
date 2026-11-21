@@ -42,6 +42,10 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
    scripts/load.sh --replace ../knowledge-graph/data ../knowledge-graph/examples
    ```
    `--replace` empties the default graph first, so the store then holds exactly these files.
+   Then rebuild the text index, which `--replace` doesn't clean (see [Text search](#text-search)):
+   ```bash
+   sudo scripts/reindex.sh
+   ```
 
 ## Access control
 
@@ -73,6 +77,7 @@ The repository includes a minimal `fuseki-config/assembler.ttl` that:
 - Uses TDB1 dataset type (`tdb:DatasetTDB`) compatible with secoresearch/fuseki image
 - Stores data at `/fuseki-base/databases/tdb`
 - Enables **Graph Store Protocol (GSP)** for data upload/edit in the UI
+- Sets the **query timeout** and the **text index** (both below)
 - **Excludes reasoning** (no RDFS/OWL inference)
 
 > **Important**: When using bind mounts for configuration, manually edit `assembler.ttl` to enable endpoints rather than using environment variables (due to permission restrictions).
@@ -81,6 +86,47 @@ To apply configuration changes:
 ```bash
 sudo docker compose down && sudo docker compose up -d
 ```
+
+## Query timeout
+
+Every query gets **10 s to its first result and 120 s overall**
+(LOD-AM/planning#30), so one heavy query can't occupy Fuseki for long. After
+the first limit the client gets `503 Query timed out`; after the second, the
+results already sent end with `Query cancelled due to timeout`.
+
+The value is `ja:context` on the `:text` dataset in `assembler.ttl`. The image's
+`QUERY_TIMEOUT` variable does **not** work here: it edits the image's
+`/fuseki-base/config.ttl`, which Fuseki 6.2.0, as the image starts it, never
+reads (checked with the 6.2.0 jar, 2026-11-21). `ja:context` on the
+`fuseki:Service` has no effect either. CI checks that a slow query is cut off.
+
+## Text search
+
+A Lucene index over `rdfs:label`, `skos:prefLabel` and `skos:altLabel`
+(LOD-AM/planning#31) gives fast label search in SPARQL:
+
+```sparql
+PREFIX text: <http://jena.apache.org/text#>
+SELECT ?s ?label ?score WHERE {
+  (?s ?score ?label) text:query ("spear*" "lang:en")
+}
+```
+
+- All three properties share one field, so the search covers all labels; a
+  property as first argument (`text:query (rdfs:label "…")`) doesn't narrow it.
+- One field for all languages, no stemming (`spearhead` doesn't find
+  `spearheads`; use `spear*`). `"lang:en"` limits hits to English labels.
+- The index lives in `fuseki-data/lucene/`, next to TDB. It holds nothing that
+  isn't in TDB, so it can be deleted and rebuilt at any time.
+- Loading with `scripts/load.sh` (adding) updates it. **Clearing a graph doesn't**:
+  after `scripts/load.sh --replace` the removed labels are still found. Rebuild it:
+  ```bash
+  sudo scripts/reindex.sh
+  ```
+  This stops Fuseki for a few seconds (TDB1 allows only one process), deletes
+  the index and rebuilds it with the image's `textindexer` in a one-off
+  container, then starts Fuseki again. `scripts/smoke_test.sh` fails if the
+  index is empty.
 
 ## Environment Variables
 
@@ -171,5 +217,7 @@ sudo docker compose up -d --force-recreate fuseki
 
 CI (`.github/workflows/test.yml`) starts the real container with this
 configuration, loads the knowledge-graph data and runs `scripts/smoke_test.sh`.
+It also checks that `scripts/reindex.sh` removes stale index entries and that
+a slow query is stopped by the timeout (on the CI container only).
 The smoke test never writes: its write probe sends invalid Turtle, so it is
 safe to run against production.
