@@ -53,10 +53,11 @@ running server are only verified once the owner has deployed them
   Fuseki 6.2.0 with the secured `shiro.ini`; knowledge-graph `data/` + `examples/` loaded
   (664 triples), `scripts/smoke_test.sh --min-triples 664` passed on the server. The old checkout
   (with the old database) is kept as `~/triplestore-old` for rollback until the owner removes it.
-  Owner's remaining checks are in #3 (web UI asks for the login, `.bashrc` exports removed, Dependabot).
-- Pitfall seen on the redeploy: if `fuseki-data/` doesn't exist or isn't owned by 9008, Fuseki
-  exits with `Not writable: /fuseki-base/databases` and restarts in a loop.
-  Fix: `sudo chown -R 9008:9008 fuseki-data fuseki-config`, then recreate.
+  All checks in #3 done by the owner (web UI asks for the login, `.bashrc` exports removed, Dependabot active).
+- Pitfall seen on the redeploy: Docker created the missing `fuseki-data/` as root, so Fuseki
+  exited with `Not writable: /fuseki-base/databases` in a restart loop. Now `create_host_path: false`
+  in `docker-compose.yml` refuses to start without the folder; the `chown` step is still needed
+  (README Quick Start, Troubleshooting).
 - Server decisions (owner, 2026-11-21; README "Server setup"): a dedicated LXC on Proxmox that runs only this
   stack, so Watchtower stays host-wide (#6); the proxy runs on another VM, so port 3030 can't be
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
