@@ -27,6 +27,7 @@ services:
       - lod-am-network
 
   watchtower:
+    # Host-wide on purpose: the VM runs only this stack (README, Server setup).
     # Pinned as well: with fixed tags Watchtower only picks up rebuilds of the
     # same version (e.g. base-image security fixes), not new versions.
     image: nickfedor/watchtower:1.24.0
