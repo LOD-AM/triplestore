@@ -41,7 +41,9 @@ jobs:
       - name: Start Fuseki
         run: |
           mkdir -p fuseki-data
-          sudo chown -R 9008:9008 fuseki-data fuseki-config
+          sudo chown -R 9008:9008 fuseki-data
+          # fuseki-config stays the checkout user's; Fuseki writes via group 9008
+          sudo chgrp 9008 fuseki-config && sudo chmod 2775 fuseki-config
           docker compose up -d fuseki
           for i in $(seq 1 60); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' lod-am-fuseki)" = healthy ] && break
@@ -55,6 +57,15 @@ jobs:
 
       - name: Smoke test
         run: scripts/smoke_test.sh --min-triples 100
+
+      # As on the server: the checkout user (not root, not 9008) replaces the
+      # config, as git pull does; reindex.sh below restarts Fuseki with it.
+      - name: The checkout user can replace fuseki-config/assembler.ttl
+        run: |
+          cp fuseki-config/assembler.ttl /tmp/assembler.ttl
+          rm fuseki-config/assembler.ttl
+          cp /tmp/assembler.ttl fuseki-config/assembler.ttl
+          ls -ln fuseki-config
 
       # planning#31: --replace leaves deleted labels in the text index;
       # scripts/reindex.sh must remove them.

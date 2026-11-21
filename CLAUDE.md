@@ -45,7 +45,9 @@ running server are only verified once the owner has deployed them
 - Secrets come from `.env` (see `.env.example`). Never put real values in files;
   use obviously fake ones (`change-me`, `example.invalid`) in examples.
 - Config is bind-mounted and edited by hand (env-var config doesn't work with the
-  bind-mount permissions). Container runs as UID 9008.
+  bind-mount permissions). Container runs as UID 9008 (group 0, plus group 9008 via `group_add`).
+  `fuseki-data/` belongs to 9008; `fuseki-config/` belongs to the checkout user, group 9008, mode 2775:
+  Fuseki 6.2.0 refuses to start unless it can write there, and git must be able to replace files in it.
 - Don't enable reasoning: the knowledge graph is modelled for no inference.
 - The `data` endpoint allows writes. Any change that could expose it publicly
   needs explicit owner approval.
