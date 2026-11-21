@@ -55,16 +55,21 @@ running server are only verified once the owner has deployed them
 - Images are pinned. Version bumps come as Dependabot PRs: check the Jena
   release notes (TDB1 is still used) and let CI pass before merging.
 
-## Where to resume (state 2026-11-21)
-- **#3 redeployed (2026-11-21):** fresh clone in `~/triplestore` on the LXC, `.env` in use,
-  Fuseki 6.2.0 with the secured `shiro.ini`; knowledge-graph `data/` + `examples/` loaded
-  (664 triples), `scripts/smoke_test.sh --min-triples 664` passed on the server. The old checkout
-  (with the old database) is kept as `~/triplestore-old` for rollback until the owner removes it.
-  All checks in #3 done by the owner (web UI asks for the login, `.bashrc` exports removed, Dependabot active).
-- Pitfall seen on the redeploy: Docker created the missing `fuseki-data/` as root, so Fuseki
-  exited with `Not writable: /fuseki-base/databases` in a restart loop. Now `create_host_path: false`
-  in `docker-compose.yml` refuses to start without the folder; the `chown` step is still needed
-  (README Quick Start, Troubleshooting).
+## Where to resume (state 2026-11-21, evening)
+- **Live on the server (deployed and verified by the owner, 2026-11-21):** Fuseki 6.2.0 with the secured
+  `shiro.ini` (#3), query timeout `10000,120000` (planning#30) and the Lucene label index (planning#31; #12),
+  `fuseki-config/` owned by the owner's user with group 9008 + `group_add` (#13; `GroupAdd [9008]` confirmed).
+  knowledge-graph `data/` + `examples/` loaded (664 triples), index rebuilt with `scripts/reindex.sh`,
+  `scripts/smoke_test.sh --min-triples 664` passes incl. text search. Future `git pull`s need no `chown`.
+- Server checkout: `~/triplestore` on the LXC, `.env` in use. `~/triplestore-old` (old database) is kept for
+  rollback until the owner removes it.
+- Deploy pitfalls seen so far (all in README Troubleshooting): a missing `fuseki-data/` (now refused by
+  `create_host_path: false`; on the #12 deploy the owner had to recreate it, cause unknown, data reloaded);
+  `fuseki-config/` owned by 9008 blocked `git pull` (fixed by #13). A config change only takes effect after
+  `sudo docker compose up -d --force-recreate fuseki`; ask the owner to confirm that step.
+- After every `scripts/load.sh --replace`: `sudo scripts/reindex.sh` (clearing a graph leaves stale index entries).
+- Next: LOD-AM/planning#7 (pull, load and swap a checked release via **webhook**, owner approved 2026-11-21);
+  blocked by planning#6. The swap must end with `reindex.sh` (a few seconds of downtime).
 - Server decisions (owner, 2026-11-21; README "Server setup"): a dedicated LXC on Proxmox that runs only this
   stack, so Watchtower stays host-wide (#6); the proxy runs on another VM, so port 3030 can't be
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
