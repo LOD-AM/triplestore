@@ -59,7 +59,7 @@ writes it into the `admin=` line when the container is created. After changing
 
 - **Persistent storage**: Fuseki data is stored in `./fuseki-data/` (bind mount to `/fuseki-base/databases`)
 - **Custom configs**: `assembler.ttl` lives in `./fuseki-config/` (bind mount to `/fuseki-base/configuration`); `./shiro.ini` is mounted read-only as the image's shiro template
-- **Versions**: images are pinned in `docker-compose.yml`; Dependabot opens PRs for new versions. Watchtower only picks up rebuilds of the pinned tags and sends email notifications. Note that Watchtower watches *all* containers on the host.
+- **Versions**: images are pinned in `docker-compose.yml`; Dependabot opens PRs for new versions. Watchtower only picks up rebuilds of the pinned tags and sends email notifications. Watchtower watches *all* containers on the host on purpose (see [Server setup](#server-setup)).
 - **Healthcheck**: Docker marks `lod-am-fuseki` healthy when `/$/ping` answers
 - **Reasoning**: Currently **disabled** - AFO and CIDOC CRM will be implemented directly without inference mappings
 
@@ -101,6 +101,30 @@ Set in `.env` (template: `.env.example`).
 | `WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER` | No | - | SMTP username |
 | `WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD` | Yes | - | SMTP password |
 | `WATCHTOWER_NOTIFICATION_EMAIL_DELAY` | No | `2` | Delay between notifications in seconds |
+
+## Server setup
+
+Decisions for the production server (triple.lod-am.net), with the issues they come from:
+
+- **Dedicated VM.** The machine runs only this stack. That is why Watchtower is
+  host-wide on purpose (#6): it has the Docker socket and updates every
+  container on the host, which here means only `lod-am-fuseki` and itself. If
+  other containers are ever added to this machine, revisit this
+  (`WATCHTOWER_LABEL_ENABLE=true` plus the label
+  `com.centurylinklabs.watchtower.enable=true` restricts it to labelled containers).
+- **Reverse proxy on another VM** (Nginx Proxy Manager, #5). It reaches Fuseki
+  over the network, so port 3030 stays published on all interfaces;
+  binding it to `127.0.0.1` would cut the proxy off. Anything that reaches
+  `<server>:3030` directly bypasses the proxy's authentication, so Fuseki's own
+  access control (`shiro.ini`) is what protects writes and the admin API.
+- **No backups of the triplestore itself** (#4). The store holds no data of its
+  own: everything comes from the owner's relational database (backed up
+  separately) via the converter, and from LOD-AM/knowledge-graph. The
+  whole-machine backup covers the rest. To restore, reload with `scripts/load.sh`
+  instead of relying on a copy of `fuseki-data/`: TDB files copied while Fuseki
+  is running are not guaranteed to be consistent.
+  Consequence: **don't edit data only in the triplestore** (web UI upload or
+  Graph Store writes that exist nowhere else). Change the sources and reload.
 
 ## Architecture
 
