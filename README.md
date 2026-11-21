@@ -106,17 +106,29 @@ Set in `.env` (template: `.env.example`).
 
 Decisions for the production server (triple.lod-am.net), with the issues they come from:
 
-- **Dedicated VM.** The machine runs only this stack. That is why Watchtower is
+- **Dedicated host.** Fuseki runs in Docker inside its own LXC on Proxmox, which runs only this stack. That is why Watchtower is
   host-wide on purpose (#6): it has the Docker socket and updates every
   container on the host, which here means only `lod-am-fuseki` and itself. If
-  other containers are ever added to this machine, revisit this
+  other containers are ever added to this LXC, revisit this
   (`WATCHTOWER_LABEL_ENABLE=true` plus the label
   `com.centurylinklabs.watchtower.enable=true` restricts it to labelled containers).
 - **Reverse proxy on another VM** (Nginx Proxy Manager, #5). It reaches Fuseki
-  over the network, so port 3030 stays published on all interfaces;
-  binding it to `127.0.0.1` would cut the proxy off. Anything that reaches
-  `<server>:3030` directly bypasses the proxy's authentication, so Fuseki's own
-  access control (`shiro.ini`) is what protects writes and the admin API.
+  over the network, so port 3030 can't be bound to `127.0.0.1`; that would cut
+  the proxy off. Anything that reaches `<server>:3030` directly bypasses the
+  proxy's authentication, so Fuseki's own access control (`shiro.ini`) is what
+  protects writes and the admin API.
+- **Port 3030 only from the proxy** (Proxmox firewall, LOD-AM/planning#29). The
+  datacenter firewall is enabled with input policy `ACCEPT`, so it changes
+  nothing for the Proxmox hosts. The LXC's firewall is enabled (options and
+  `net0`), also with input policy `ACCEPT`, and has two rules for port 3030, in
+  this order: `IN ACCEPT -source <proxy VM> -p tcp -dport 3030`, then
+  `IN DROP -p tcp -dport 3030`. **The order matters**: Proxmox can insert new
+  rules at the top, and with DROP first the proxy is blocked too. Scripts on the
+  LXC itself (`load.sh`, `smoke_test.sh` via `localhost`) aren't affected.
+  The rules live on the Proxmox host in `/etc/pve/firewall/<CTID>.fw`, not in this repo.
+  Check from a LAN machine other than the proxy:
+  `curl -m 5 'http://<lxc-ip>:3030/$/ping'` must time out.
+  Rollback: disable the DROP rule.
 - **No backups of the triplestore itself** (#4). The store holds no data of its
   own: everything comes from the owner's relational database (backed up
   separately) via the converter, and from LOD-AM/knowledge-graph. The
