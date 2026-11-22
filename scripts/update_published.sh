@@ -79,8 +79,10 @@ fi
 # 2. check
 listed=$(python3 scripts/release.py verify "$R/incoming")
 while read -r file triples; do
-  got=$(riot --count "$R/incoming/$file" 2>&1 | sed -n 's/.*Triples = \([0-9,]*\).*/\1/p' | tr -d ',')
-  [ "$got" = "$triples" ] || { log "FAIL: release rejected: $file has '$got' triples, the manifest says $triples"; exit 1; }
+  out=$(riot --count "$R/incoming/$file" 2>&1) || true
+  got=$(sed -n 's/.*Triples = \([0-9,]*\).*/\1/p' <<< "$out" | tr -d ',')
+  [ -n "$got" ] || { log "FAIL: riot could not count $file:"; tail -5 <<< "$out"; exit 1; }
+  [ "$got" = "$triples" ] || { log "FAIL: release rejected: $file has $got triples, the manifest says $triples"; exit 1; }
 done <<< "$listed"
 python3 scripts/release.py combine "$R/incoming" "$R/incoming/combined.ttl"
 riot --output=ntriples "$R/incoming/combined.ttl" > "$R/incoming/combined.nt"

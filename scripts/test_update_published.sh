@@ -48,7 +48,9 @@ m = {"manifest_version": 2, "created": "2026-01-01T00:00:00Z", "test": name,
 PY
   # triple counts as the pipeline reports them (rdflib len = distinct triples): count with riot here
   python3 - "$T/source" "$(for f in "$T/source/published/"*.ttl; do
-      n=$(scripts/riot.sh --count "$f" 2>&1 | sed -n 's/.*Triples = \([0-9,]*\).*/\1/p' | tr -d ,); echo "$(basename "$f")=$n"; done | tr '\n' ' ')" <<'PY'
+      out=$(scripts/riot.sh --count "$f" 2>&1) || true; n=$(sed -n 's/.*Triples = \([0-9,]*\).*/\1/p' <<< "$out" | tr -d ,)
+      [ -n "$n" ] || { echo "FAIL riot could not count $f:" >&2; tail -5 <<< "$out" >&2; exit 1; }
+      echo "$(basename "$f")=$n"; done | tr '\n' ' ')" <<'PY'
 import json, sys
 from pathlib import Path
 d = Path(sys.argv[1]); counts = dict(kv.split("=") for kv in sys.argv[2].split())
