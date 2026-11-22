@@ -6,6 +6,11 @@
 Description=LOD-AM release webhook (planning#7)
 After=network-online.target
 Wants=network-online.target
+# Restarts on failure; if it fails 5 times within 10 minutes it stays down and mails the owner
+# (deploy/alert.sh, planning#34)
+StartLimitIntervalSec=10min
+StartLimitBurst=5
+OnFailure=lodam-alert@%n.service
 
 [Service]
 # A root-owned copy (deploy/install.sh): the dynamic user can't read the checkout in a home

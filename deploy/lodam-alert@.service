@@ -1,0 +1,13 @@
+# Mails the owner that a LOD-AM unit failed (LOD-AM/planning#34): the units in deploy/ have
+# OnFailure=lodam-alert@%n.service, so a failed run starts lodam-alert@<that unit>.service.
+# Installed by deploy/install.sh, which fills in @DIR@; never enabled on its own.
+# Test: sudo deploy/alert.sh --test, then the deliberately failing run in the README ("Alerts").
+[Unit]
+Description=LOD-AM: mail that %i failed (planning#34)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@DIR@/deploy/alert.sh %i
+TimeoutStartSec=2min

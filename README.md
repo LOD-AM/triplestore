@@ -237,7 +237,7 @@ Finally, in the pipeline's `.env` on the data LXC:
 | Update now | `sudo systemctl start --no-block lodam-update-published` |
 | Load even if already live | `sudo scripts/update_published.sh --force` |
 | Back to the previous release | `sudo scripts/update_published.sh --rollback` |
-| Log | `sudo journalctl -u lodam-update-published -e` (and `-u lodam-webhook`) |
+| Log | `sudo journalctl -u lodam-update-published -e` (and `-u lodam-webhook`); a failed run is mailed ([Alerts](#alerts-lod-amplanning34)) |
 | Which release is live | `cat releases/live/manifest.sha256`, or the SPARQL query above |
 | Hand the live release to the website again | `sudo scripts/publish_website.sh` ([Website](#website-lod-amwebsite21)) |
 | Undo the installation | `sudo deploy/install.sh --remove` (data, releases and token stay) |
@@ -269,6 +269,32 @@ checkout's `.env`: `LODAM_WEBSITE_REPO=git@github.com:LOD-AM/website.git`, and t
 sudo scripts/publish_website.sh
 ```
 GitHub's host key is pinned in `deploy/github_known_hosts`. Revoke the hand-over: delete the deploy key.
+
+## Alerts (LOD-AM/planning#34)
+A failed run mails the owner: `lodam-update-published.service` (a rejected release, a failed load,
+reindex, smoke test or hand-over to the website) and `lodam-webhook.service` (only when it keeps
+crashing: 5 failures within 10 minutes) have `OnFailure=lodam-alert@%n.service`, which runs
+`deploy/alert.sh`. The mail holds the unit's status and its last 60 journal lines; Fuseki keeps
+serving a fully checked release in every case. Normal runs, "already live" and "another update is in
+progress" send nothing. The same script runs on the data LXC for the pipeline (LOD-AM/pipeline
+`deploy/README.md`).
+
+It sends over SMTP with `curl` (TLS required; port 465 = implicit TLS, otherwise STARTTLS), so no
+mail server is needed. Without new settings it uses **Watchtower's SMTP account** from `.env`
+(`WATCHTOWER_NOTIFICATION_EMAIL_*`); `LODAM_ALERT_*` lines (`.env.example`) override it, e.g. another
+recipient. Setup and test (owner, once):
+```bash
+git pull && sudo deploy/install.sh            # installs lodam-alert@.service and the OnFailure= lines
+sudo deploy/alert.sh --test                   # a test mail: checks the SMTP settings
+# a deliberately failing run, through the same OnFailure= path (mail "lodam-alert-check.service failed"):
+sudo systemd-run --unit=lodam-alert-check -p OnFailure=lodam-alert@lodam-alert-check.service /bin/false
+sudo journalctl -u 'lodam-alert@*' -e          # what the alert unit did
+```
+The website's workflows are covered by GitHub's own failure mails (github.com → Settings →
+Notifications → Actions: "Only notify for failed workflows"): `data release` runs as the owner (the
+deploy-key push counts as theirs), and so does `build` on `main` after a merge. The one exception is the
+`build` that `data release` starts on the branch: it runs as `github-actions[bot]`, so no mail. Its
+failure shows as a red check on the "Data release" pull request, and nothing goes live until that PR is merged.
 
 ## Environment Variables
 
@@ -374,7 +400,7 @@ configuration, loads the knowledge-graph data and runs `scripts/smoke_test.sh`.
 It also checks that `scripts/reindex.sh` removes stale index entries, the migration to named
 graphs, the release update (`LODAM_TEST=1 scripts/test_update_published.sh`: new release, already
 live, replaced, four kinds of rejected release, put back after a failure, rollback), the webhook
-receiver (`deploy/test_webhook.sh`), the hand-over to the website (`scripts/test_publish_website.sh`,
+receiver (`deploy/test_webhook.sh`), the alert mail (`deploy/test_alert.sh`, curl stubbed), the hand-over to the website (`scripts/test_publish_website.sh`,
 against a local stand-in repository), shellcheck, and that a slow query is stopped by the timeout
 (on the CI container only). `scripts/test_update_published.sh` writes to Fuseki: never run it on
 production.

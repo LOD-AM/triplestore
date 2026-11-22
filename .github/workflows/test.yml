@@ -102,6 +102,10 @@ jobs:
       - name: Webhook receiver
         run: bash deploy/test_webhook.sh
 
+      # planning#34: the failure mail (curl, systemctl and journalctl stubbed)
+      - name: Alert mail
+        run: bash deploy/test_alert.sh
+
       # website#21: the live release goes to the website's branch data-release (local stand-in repo)
       - name: Hand-over to the website (publish_website.sh)
         run: bash scripts/test_publish_website.sh
