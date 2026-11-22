@@ -50,7 +50,8 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
    ```bash
    scripts/load.sh --replace ../knowledge-graph/data ../knowledge-graph/examples
    ```
-   `--replace` empties the default graph first, so the store then holds exactly these files.
+   The data goes into the named graph `https://lod-am.net/graph/knowledge-graph` (see
+   [Named graphs](#named-graphs)); `--replace` empties it first, so it then holds exactly these files.
    Then rebuild the text index, which `--replace` doesn't clean (see [Text search](#text-search)):
    ```bash
    sudo scripts/reindex.sh
@@ -137,6 +138,108 @@ SELECT ?s ?label ?score WHERE {
   container, then starts Fuseki again. `scripts/smoke_test.sh` fails if the
   index is empty.
 
+- The index doesn't know graphs: a label stored in two named graphs is found twice. Use
+  `SELECT DISTINCT` when that matters.
+
+## Named graphs
+
+All data sits in named graphs (owner, 2026-11-22, LOD-AM/planning#7):
+
+| Graph | Contents | Loaded by |
+|---|---|---|
+| `https://lod-am.net/graph/knowledge-graph` | LOD-AM/knowledge-graph `data/` + `examples/` | `scripts/load.sh` (by hand) |
+| `https://lod-am.net/graph/published` | the publications the owner released, from LOD-AM/pipeline, plus a description of which release is live | `scripts/update_published.sh` ([Releases](#releases)) |
+
+The dataset has `tdb:unionDefaultGraph true` (`fuseki-config/assembler.ttl`): **a query without
+`GRAPH` or `FROM` sees all named graphs together**, and a triple stored in two graphs counts once.
+One graph only: `SELECT … FROM <https://lod-am.net/graph/published> WHERE { … }` or `GRAPH <…> { … }`.
+Which release is live:
+```sparql
+SELECT ?p ?o WHERE { <https://lod-am.net/graph/published> ?p ?o }
+```
+(`dcterms:identifier` = the manifest's sha256, `dcterms:modified` = when it was loaded,
+`dcterms:source` = the pipeline and knowledge-graph commits.)
+
+TDB1 hides the stored default graph when the union is on, so nothing is loaded there:
+`scripts/load.sh` writes only to named graphs.
+
+**Migrating a store from before named graphs** (once, right after deploying the new assembler;
+until then queries see no data, because the old copy sits in the now hidden default graph):
+```bash
+sudo scripts/migrate_named_graphs.sh ../knowledge-graph/data ../knowledge-graph/examples
+```
+It loads the knowledge graph into its named graph, and only if that worked deletes the stored
+default graph, then rebuilds the text index and runs the smoke test. Tested with the Fuseki 6.2.0
+jar on a store loaded the old way (664 triples moved, default graph empty afterwards).
+
+## Releases
+
+The released publications come from LOD-AM/pipeline, which runs on the data LXC (LOD-AM/planning#6)
+and copies each checked release to `/srv/lodam/release` there. `scripts/update_published.sh` pulls
+it (LOD-AM/planning#7; owner's choices of 2026-11-21/22):
+
+1. **Fetch:** `rsync` over SSH into `releases/incoming/`, with a key the data LXC restricts to reading
+   that one directory (`rrsync -ro`). The data LXC has no access to this machine.
+2. **Check** (`scripts/release.py`, `scripts/riot.sh`): the manifest says every check passed, the
+   pipeline and knowledge-graph commits were clean, the source is a database snapshot; every listed
+   file is there with its sha256 and nothing else; Jena's riot counts each file's triples as in the
+   manifest; no blank nodes. A release that fails any of this is rejected and changes nothing.
+3. **Load** the publications and the graph's description in **one** Graph Store `PUT`: one
+   transaction, so a query sees the old release or the new one, never a mix. Then the graph must
+   hold exactly the expected number of triples.
+4. **Reindex** (Fuseki stops for a few seconds) and **smoke test**. If anything fails after the load,
+   the live release is put back.
+5. The release becomes `releases/live/`, the one before `releases/previous/`.
+
+It runs when the pipeline's webhook arrives (`deploy/webhook.py`, port 9300, reachable only from the
+data LXC), and daily at 05:47 as a fallback; an unchanged release ends with "already live".
+
+### Setup (owner, once)
+On the **data LXC**:
+```bash
+sudo adduser --system --group --home /var/lib/lodam-release --shell /bin/sh lodam-release
+sudo install -d -m 755 /srv/lodam/release      # the pipeline copies each release here
+sudo install -d -m 700 -o lodam-release -g lodam-release /var/lib/lodam-release/.ssh
+```
+Then, in the pipeline's `.env`: `LODAM_PUBLISH_DIR=/srv/lodam/release`. The account has no
+password, so it can only be used with the key below, and only for that one command (`/bin/sh` runs
+the forced command; `nologin` would refuse it).
+
+On the **triplestore LXC**:
+```bash
+sudo ssh-keygen -t ed25519 -N '' -C lodam-release -f /root/.ssh/lodam-release
+sudo cat /root/.ssh/lodam-release.pub
+```
+On the **data LXC**, put that public key into `/var/lib/lodam-release/.ssh/authorized_keys` (owner
+`lodam-release`, mode 600), as one line:
+```
+restrict,command="rrsync -ro /srv/lodam/release" ssh-ed25519 AAAA… lodam-release
+```
+**Proxmox firewall:** on the data LXC, `IN ACCEPT -source <triplestore LXC> -p tcp -dport 22`; on
+the triplestore LXC, `IN ACCEPT -source <data LXC> -p tcp -dport 9300`, then
+`IN DROP -p tcp -dport 9300` (ACCEPT above DROP, as for 3030).
+
+On the **triplestore LXC**, in this checkout's `.env`: `LODAM_RELEASE_SOURCE=lodam-release@<data LXC>:`.
+Then:
+```bash
+sudo deploy/install.sh                                  # prints the webhook token once
+sudo systemctl start --no-block lodam-update-published  # first fetch; the first SSH connection
+sudo journalctl -u lodam-update-published -f             # records the data LXC's host key
+```
+Finally, in the pipeline's `.env` on the data LXC:
+`LODAM_RELEASE_WEBHOOK=http://<triplestore LXC>:9300/lodam-release` and
+`LODAM_RELEASE_WEBHOOK_TOKEN=<the printed token>`.
+
+### Operate
+| | |
+|---|---|
+| Update now | `sudo systemctl start --no-block lodam-update-published` |
+| Load even if already live | `sudo scripts/update_published.sh --force` |
+| Back to the previous release | `sudo scripts/update_published.sh --rollback` |
+| Log | `sudo journalctl -u lodam-update-published -e` (and `-u lodam-webhook`) |
+| Which release is live | `cat releases/live/manifest.sha256`, or the SPARQL query above |
+| Undo the installation | `sudo deploy/install.sh --remove` (data, releases and token stay) |
+
 ## Environment Variables
 
 Set in `.env` (template: `.env.example`).
@@ -191,7 +294,8 @@ Decisions for the production server (triple.lod-am.net), with the issues they co
 - **No backups of the triplestore itself** (#4). The store holds no data of its
   own: everything comes from the owner's relational database (backed up
   separately) via the converter, and from LOD-AM/knowledge-graph. The
-  whole-machine backup covers the rest. To restore, reload with `scripts/load.sh`
+  whole-machine backup covers the rest. To restore, reload with `scripts/load.sh` and
+  `sudo scripts/update_published.sh --force`
   instead of relying on a copy of `fuseki-data/`: TDB files copied while Fuseki
   is running are not guaranteed to be consistent.
   Consequence: **don't edit data only in the triplestore** (web UI upload or
@@ -237,7 +341,11 @@ git pull
 
 CI (`.github/workflows/test.yml`) starts the real container with this
 configuration, loads the knowledge-graph data and runs `scripts/smoke_test.sh`.
-It also checks that `scripts/reindex.sh` removes stale index entries and that
-a slow query is stopped by the timeout (on the CI container only).
+It also checks that `scripts/reindex.sh` removes stale index entries, the migration to named
+graphs, the release update (`LODAM_TEST=1 scripts/test_update_published.sh`: new release, already
+live, replaced, four kinds of rejected release, put back after a failure, rollback), the webhook
+receiver (`deploy/test_webhook.sh`), shellcheck, and that a slow query is stopped by the timeout
+(on the CI container only). `scripts/test_update_published.sh` writes to Fuseki: never run it on
+production.
 The smoke test never writes: its write probe sends invalid Turtle, so it is
 safe to run against production.
