@@ -20,3 +20,6 @@ fuseki-data/
 # OS
 *.swp
 *.swo
+
+# Releases fetched from LOD-AM/pipeline (scripts/update_published.sh): incoming, live, previous
+releases/
