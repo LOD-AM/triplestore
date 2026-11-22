@@ -68,6 +68,8 @@ release one "$SRC_TTL"; upd || fail "1: first update"
 n1=$(gcount); [ "$n1" -gt 0 ] && [ -f releases/live/manifest.sha256 ] || fail "1: graph empty or no releases/live"
 [ "$(q "SELECT (COUNT(*) AS ?n) WHERE { <$GRAPH> <http://purl.org/dc/terms/identifier> ?id }")" = 1 ] || fail "1: no graph description"
 [ "$(q 'SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }')" -ge "$n1" ] || fail "1: union does not see the graph"
+grep -q "this is the first release" "$T/out" || fail "1: first release not reported as such"
+! grep -q "UnknownHostException" "$T/out" || fail "1: riot printed an UnknownHostException (scripts/riot.sh --hostname)"
 echo "ok   1 new release loaded ($n1 triples incl. description), visible without FROM"
 
 upd || fail "2: second run"; grep -q "already live" "$T/out" || fail "2: expected 'already live'"

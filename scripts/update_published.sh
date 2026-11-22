@@ -101,5 +101,7 @@ if ! reindex || ! smoke "$expected"; then log "FAIL: reindex or smoke test faile
 # 5. promote
 echo "$sha" > "$R/incoming/manifest.sha256"
 rm -f "$R/incoming/combined.nt"
-rm -rf "$R/previous"; [ -d "$R/live" ] && mv "$R/live" "$R/previous"; mv "$R/incoming" "$R/live"
-log "release $sha is live in <$GRAPH> ($expected triples); the one before is in releases/previous/"
+rm -rf "$R/previous"; before="this is the first release"
+[ -d "$R/live" ] && mv "$R/live" "$R/previous" && before="the one before is in releases/previous/"
+mv "$R/incoming" "$R/live"
+log "release $sha is live in <$GRAPH> ($expected triples); $before"
