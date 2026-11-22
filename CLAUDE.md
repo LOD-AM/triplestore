@@ -61,23 +61,26 @@ running server are only verified once the owner has deployed them
 - Images are pinned. Version bumps come as Dependabot PRs: check the Jena
   release notes (TDB1 is still used) and let CI pass before merging.
 
-## Where to resume (state 2026-11-21, evening)
-- **Live on the server (deployed and verified by the owner, 2026-11-21):** Fuseki 6.2.0 with the secured
-  `shiro.ini` (#3), query timeout `10000,120000` (planning#30) and the Lucene label index (planning#31; #12),
-  `fuseki-config/` owned by the owner's user with group 9008 + `group_add` (#13; `GroupAdd [9008]` confirmed).
-  knowledge-graph `data/` + `examples/` loaded (664 triples), index rebuilt with `scripts/reindex.sh`,
-  `scripts/smoke_test.sh --min-triples 664` passes incl. text search. Future `git pull`s need no `chown`.
+## Where to resume (state 2026-11-22, evening)
+- **Live on the server (verified by the owner):** Fuseki 6.2.0 with the secured `shiro.ini` (#3), query
+  timeout `10000,120000` (planning#30), Lucene label index (planning#31; #12), `fuseki-config/` owned by the
+  owner's user with group 9008 + `group_add` (#13). **Named graphs + union default graph** (planning#7, #16):
+  `…/graph/knowledge-graph` 664 triples (loaded by hand; automating it: planning#35), `…/graph/published` 6234
+  (release `7b55606a…`), union 6883; smoke test passes incl. text search.
+- **Release chain live (2026-11-22):** the pipeline's webhook (port 9300, Proxmox: only from the data LXC,
+  ACCEPT above DROP) starts `lodam-update-published`; daily fallback 05:47. After a live release,
+  `scripts/publish_website.sh` (#18) pushes it to the website's branch `data-release` (deploy key
+  `/root/.ssh/lodam-website`, `LODAM_WEBSITE_REPO` in `.env`); the website workflow opens the PR.
+  Logs: `sudo journalctl -u lodam-update-published -e`, `-u lodam-webhook`. No alerts on failure yet (planning#34).
 - Server checkout: `~/triplestore` on the LXC, `.env` in use. `~/triplestore-old` (old database) is kept for
-  rollback until the owner removes it.
+  rollback until the owner removes it. Owner to-dos: LOD-AM/planning#33 (e.g. rotate the webhook token).
 - Deploy pitfalls seen so far (all in README Troubleshooting): a missing `fuseki-data/` (now refused by
-  `create_host_path: false`; on the #12 deploy the owner had to recreate it, cause unknown, data reloaded);
-  `fuseki-config/` owned by 9008 blocked `git pull` (fixed by #13). A config change only takes effect after
+  `create_host_path: false`); `fuseki-config/` owned by 9008 blocked `git pull` (fixed by #13); the webhook
+  receiver could not read its script in a home directory (#17: copy in `/usr/local/lib/lodam`, re-run
+  `sudo deploy/install.sh` after changes in `deploy/`). A config change only takes effect after
   `sudo docker compose up -d --force-recreate fuseki`; ask the owner to confirm that step.
 - After every `scripts/load.sh --replace`: `sudo scripts/reindex.sh` (clearing a graph leaves stale index entries).
-- planning#7 (pull, load and swap a checked release; webhook + daily timer): implemented and tested locally
-  (Fuseki 6.2.0 jar); CI runs the same tests with the real image (test.yml); not deployed yet. Deploy = `git pull`, `docker compose up -d --force-recreate fuseki`,
-  right away `sudo scripts/migrate_named_graphs.sh …` (queries see nothing until then), then README "Releases".
-  `scripts/test_update_published.sh` writes to Fuseki: CI/local only, never production.
+- `scripts/test_update_published.sh` writes to Fuseki: CI/local only, never production.
 - Server decisions (owner, 2026-11-21; README "Server setup"): a dedicated LXC on Proxmox that runs only this
   stack, so Watchtower stays host-wide (#6); the proxy runs on another VM, so port 3030 can't be
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
