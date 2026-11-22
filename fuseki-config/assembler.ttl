@@ -28,8 +28,14 @@ text:TextIndexLucene  rdfs:subClassOf  text:TextIndex .
     text:index   :lucene ;
     ja:context [ ja:cxtName "arq:queryTimeout" ; ja:cxtValue "10000,120000" ] .
 
+# Named graphs only (owner, 2026-11-22, LOD-AM/planning#7): the knowledge-graph data in
+# <https://lod-am.net/graph/knowledge-graph>, the released publications in
+# <https://lod-am.net/graph/published>. With unionDefaultGraph a query without GRAPH/FROM
+# sees all named graphs (a triple stored in several counts once). TDB1 then hides the stored
+# default graph: never load into ?default (scripts/load.sh refuses it).
 :tdb a tdb:DatasetTDB ;
-    tdb:location "/fuseki-base/databases/tdb" .
+    tdb:location "/fuseki-base/databases/tdb" ;
+    tdb:unionDefaultGraph true .
 
 # Full-text index over labels (LOD-AM/planning#31), for SPARQL like
 #   (?s ?score ?label) text:query (rdfs:label "spear*" "lang:en")

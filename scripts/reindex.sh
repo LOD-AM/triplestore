@@ -22,7 +22,7 @@ docker compose run --rm --no-deps --entrypoint sh fuseki -c \
 trap - EXIT
 docker compose start fuseki
 
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   [ "$(docker inspect -f '{{.State.Health.Status}}' lod-am-fuseki)" = healthy ] && break
   sleep 3
 done

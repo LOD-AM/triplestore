@@ -1,0 +1,13 @@
+# Daily fallback for the webhook (LOD-AM/planning#7): if a signal was lost, the release is still
+# picked up. The pipeline runs at 03:17 and takes ~40 minutes; an unchanged release costs one
+# rsync and ends with "already live".
+[Unit]
+Description=Daily LOD-AM release update (fallback for the webhook, planning#7)
+
+[Timer]
+OnCalendar=*-*-* 05:47
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

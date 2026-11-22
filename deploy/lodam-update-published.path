@@ -1,0 +1,11 @@
+# Starts lodam-update-published.service when the webhook (lodam-webhook.service) writes its
+# trigger file (LOD-AM/planning#7).
+[Unit]
+Description=LOD-AM: start the release update when the webhook fires (planning#7)
+
+[Path]
+PathChanged=/run/lodam-release/trigger
+Unit=lodam-update-published.service
+
+[Install]
+WantedBy=paths.target

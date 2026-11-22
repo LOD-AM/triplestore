@@ -1,0 +1,36 @@
+# Webhook receiver for new pipeline releases (LOD-AM/planning#7). Installed by deploy/install.sh,
+# which fills in @DIR@. It runs as an unprivileged dynamic user and can only write the trigger
+# file in /run/lodam-release; lodam-update-published.path does the rest. Port 9300 must be
+# reachable only from the data LXC (Proxmox firewall).
+[Unit]
+Description=LOD-AM release webhook (planning#7)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 @DIR@/deploy/webhook.py
+Environment=LODAM_WEBHOOK_LISTEN=0.0.0.0:9300
+LoadCredential=token:/etc/lodam/webhook-token
+DynamicUser=yes
+RuntimeDirectory=lodam-release
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+Restart=on-failure
+RestartSec=5
+# Hardening: nothing but a listening socket and its trigger file
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

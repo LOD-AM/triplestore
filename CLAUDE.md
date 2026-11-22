@@ -11,6 +11,8 @@ public later).
 - `docker-compose.yml`: services `fuseki` (port 3030, network `lod-am-network`) and `watchtower`
 - `fuseki-config/assembler.ttl`: dataset **LOD-AM**, TDB1 at `/fuseki-base/databases/tdb`,
   endpoints `/LOD-AM/sparql` + `/LOD-AM/query` (read) and `/LOD-AM/data` (Graph Store, **read-write**). No reasoning.
+  **Named graphs only** with `tdb:unionDefaultGraph true` (owner, 2026-11-22, planning#7): `…/graph/knowledge-graph`
+  (`load.sh`) and `…/graph/published` (`update_published.sh`); queries without FROM see both; never load `?default`.
   Wrapped in a `text:TextDataset` (Lucene label index at `/fuseki-base/databases/lucene`, planning#31) that also
   carries the query timeout `10000,120000` (planning#30). The timeout must stay on that dataset: the image's
   `QUERY_TIMEOUT`/`config.ttl` and `ja:context` on the service have no effect (tested with the 6.2.0 jar).
@@ -18,7 +20,11 @@ public later).
   the entrypoint copies it to `/fuseki-base/shiro.ini` and rewrites the `admin=` line. Keep that line as `admin=...` with no spaces.
   Query endpoints are public; `/LOD-AM/data`, `/LOD-AM` and `/$/**` need the admin login.
 - `.env` (gitignored, server-only; template `.env.example`): secrets and settings. `fuseki-data/` (gitignored): the database (not backed up; reload from the sources)
-- `scripts/load.sh`: load Turtle via the Graph Store; `scripts/smoke_test.sh`: health, public query, write protection,
+- `scripts/update_published.sh` (+ `release.py`, `riot.sh`): pull a release of the released publications from the
+  data LXC (rsync over SSH, `rrsync -ro`), check it against its manifest, load it in one PUT, reindex, smoke test,
+  put the old one back on failure; `--rollback`. `deploy/`: webhook receiver (`webhook.py`, port 9300), systemd units,
+  `install.sh`. `scripts/migrate_named_graphs.sh`: one-time move from the default graph (planning#7)
+- `scripts/load.sh`: load Turtle into a named graph via the Graph Store; `scripts/smoke_test.sh`: health, public query, write protection,
   text search (never writes); `scripts/reindex.sh`: rebuild the text index (stops Fuseki briefly). Needed after
   `load.sh --replace`, because clearing a graph leaves its labels in the index
 
@@ -68,8 +74,10 @@ running server are only verified once the owner has deployed them
   `fuseki-config/` owned by 9008 blocked `git pull` (fixed by #13). A config change only takes effect after
   `sudo docker compose up -d --force-recreate fuseki`; ask the owner to confirm that step.
 - After every `scripts/load.sh --replace`: `sudo scripts/reindex.sh` (clearing a graph leaves stale index entries).
-- Next: LOD-AM/planning#7 (pull, load and swap a checked release via **webhook**, owner approved 2026-11-21);
-  blocked by planning#6. The swap must end with `reindex.sh` (a few seconds of downtime).
+- planning#7 (pull, load and swap a checked release; webhook + daily timer): implemented and tested locally
+  (Fuseki 6.2.0 jar); CI runs the same tests with the real image (test.yml); not deployed yet. Deploy = `git pull`, `docker compose up -d --force-recreate fuseki`,
+  right away `sudo scripts/migrate_named_graphs.sh …` (queries see nothing until then), then README "Releases".
+  `scripts/test_update_published.sh` writes to Fuseki: CI/local only, never production.
 - Server decisions (owner, 2026-11-21; README "Server setup"): a dedicated LXC on Proxmox that runs only this
   stack, so Watchtower stays host-wide (#6); the proxy runs on another VM, so port 3030 can't be
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy

@@ -1,0 +1,14 @@
+# Pull, check, load and swap a release of the released publications (LOD-AM/planning#7).
+# Started by lodam-update-published.path (webhook) and .timer (daily fallback), or by hand:
+#   sudo systemctl start --no-block lodam-update-published
+# Installed by deploy/install.sh, which fills in @DIR@. Logs: sudo journalctl -u lodam-update-published
+[Unit]
+Description=LOD-AM: load a new checked release into <https://lod-am.net/graph/published> (planning#7)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@DIR@/scripts/update_published.sh
+TimeoutStartSec=1h

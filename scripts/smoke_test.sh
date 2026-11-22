@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check a running LOD-AM Fuseki: health, public query, write protection.
+# Check a running LOD-AM Fuseki: health, public query, write protection, triples, text search.
 # Safe on production: it never writes. The write probe sends invalid Turtle,
 # so even an unprotected server rejects it (400) without storing anything.
 #
@@ -7,7 +7,7 @@
 # Uses FUSEKI_URL (default http://localhost:3030) and, if set,
 # FUSEKI_ADMIN_PASSWORD (from .env) to check that the admin login works.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 [ -f .env ] && set -a && . ./.env && set +a
 URL="${FUSEKI_URL:-http://localhost:3030}"
 min=0; [ "${1:-}" = "--min-triples" ] && min="$2"
@@ -29,8 +29,11 @@ if [ -n "${FUSEKI_ADMIN_PASSWORD:-}" ]; then
   check "admin login works" 200 "$(printf 'user = "admin:%s"\n' "$FUSEKI_ADMIN_PASSWORD" | code -K - "$URL/\$/datasets")"
 fi
 
+# All named graphs together (tdb:unionDefaultGraph, LOD-AM/planning#7), then each one for the log
 n=$(curl -s -G -H 'Accept: text/csv' --data-urlencode 'query=SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }' "$URL/LOD-AM/sparql" | tail -n 1 | tr -d '\r')
-if [ "${n:-0}" -ge "$min" ] 2>/dev/null; then echo "ok   default graph has $n triples (min $min)"; else echo "FAIL default graph has '$n' triples, expected at least $min"; fail=1; fi
+if [ "${n:-0}" -ge "$min" ] 2>/dev/null; then echo "ok   all graphs together have $n triples (min $min)"; else echo "FAIL all graphs together have '$n' triples, expected at least $min"; fail=1; fi
+curl -s -G -H 'Accept: text/csv' --data-urlencode 'query=SELECT ?g (COUNT(*) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } } GROUP BY ?g ORDER BY ?g' \
+  "$URL/LOD-AM/sparql" | tail -n +2 | tr -d '\r' | sed 's/^/     graph /; s/,/: /'
 
 # Text index: one simple label from the data must be found by text:query.
 # Fails if the index is missing or empty: run scripts/reindex.sh.
