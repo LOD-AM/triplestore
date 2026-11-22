@@ -18,6 +18,8 @@
 #   4. rebuild the text index (replacing a graph leaves stale labels; Fuseki stops a few seconds)
 #      and run the smoke test
 #   5. the release becomes releases/live/, the one before releases/previous/
+#   6. hand it to the website (scripts/publish_website.sh, LOD-AM/website#21): a pull request there.
+#      Also after "already live" and --rollback, so a failed hand-over is retried by the next run.
 # Any failure after the load puts the live release back (or empties the graph if there was none),
 # so the graph only ever holds a fully checked release.
 # Config (.env): LODAM_RELEASE_SOURCE (e.g. lodam-release@data-lxc.lan: or a local directory),
@@ -46,6 +48,10 @@ gsp() { # method [file]: write <published> with the admin login (password via st
 riot() { scripts/riot.sh "$@"; }   # Jena's riot from the Fuseki image (no network, no database)
 reindex() { "${LODAM_REINDEX:-scripts/reindex.sh}" 9>&-; }   # the lock stays with this script, not with Fuseki
 smoke() { scripts/smoke_test.sh --min-triples "$1"; }
+website() { # 6. the website follows the live release; a failure there leaves the triplestore as it is
+  scripts/publish_website.sh 9>&- && return 0
+  log "FAIL: the triplestore is up to date, but handing the release to the website failed (retried on the next run)"; return 1
+}
 
 put_back() { # restore the live release after a failed load
   if [ -f "$R/live/combined.ttl" ]; then log "putting the live release back"; gsp PUT "$R/live/combined.ttl"
@@ -58,7 +64,7 @@ if [ "$MODE" = --rollback ]; then
   gsp PUT "$R/previous/combined.ttl"; reindex; smoke "$(graph_count)"
   rm -rf "$R/rollback-tmp"; mv "$R/live" "$R/rollback-tmp"; mv "$R/previous" "$R/live"; mv "$R/rollback-tmp" "$R/previous"
   log "rolled back: live is $(cat "$R/live/manifest.sha256"), the undone release is in releases/previous/"
-  exit 0
+  website; exit
 fi
 [ "$MODE" = update ] || [ "$MODE" = --force ] || { sed -n '2,6p' "$0"; exit 2; }
 
@@ -73,7 +79,7 @@ rsync -rt "${ssh_opts[@]}" "${LODAM_RELEASE_SOURCE%/}/" "$R/incoming/"
 sha=$(sha256sum "$R/incoming/manifest.json" 2>/dev/null | cut -d' ' -f1 || true)
 [ -n "$sha" ] || { log "FAIL: the source has no manifest.json (no release built yet?)"; exit 1; }
 if [ "$MODE" != --force ] && [ -f "$R/live/manifest.sha256" ] && [ "$(cat "$R/live/manifest.sha256")" = "$sha" ]; then
-  log "release $sha is already live; nothing to do"; exit 0
+  log "release $sha is already live; nothing to do"; website; exit
 fi
 
 # 2. check
@@ -105,3 +111,4 @@ rm -rf "$R/previous"; before="this is the first release"
 [ -d "$R/live" ] && mv "$R/live" "$R/previous" && before="the one before is in releases/previous/"
 mv "$R/incoming" "$R/live"
 log "release $sha is live in <$GRAPH> ($expected triples); $before"
+website

@@ -1,0 +1,5 @@
+# GitHub's SSH host key for scripts/publish_website.sh (pinned, so the push can't go to an impostor).
+# Published at https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+# (fingerprint SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU). If GitHub rotates it, the push fails
+# with "Host key verification failed": update this line from that page.
+github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl

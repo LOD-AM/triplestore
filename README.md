@@ -190,6 +190,7 @@ it (LOD-AM/planning#7; owner's choices of 2026-11-21/22):
 4. **Reindex** (Fuseki stops for a few seconds) and **smoke test**. If anything fails after the load,
    the live release is put back.
 5. The release becomes `releases/live/`, the one before `releases/previous/`.
+6. **Website:** the live release goes to LOD-AM/website as a pull request ([Website](#website-lod-amwebsite21)).
 
 It runs when the pipeline's webhook arrives (`deploy/webhook.py`, port 9300, reachable only from the
 data LXC), and daily at 05:47 as a fallback; an unchanged release ends with "already live".
@@ -238,8 +239,36 @@ Finally, in the pipeline's `.env` on the data LXC:
 | Back to the previous release | `sudo scripts/update_published.sh --rollback` |
 | Log | `sudo journalctl -u lodam-update-published -e` (and `-u lodam-webhook`) |
 | Which release is live | `cat releases/live/manifest.sha256`, or the SPARQL query above |
+| Hand the live release to the website again | `sudo scripts/publish_website.sh` ([Website](#website-lod-amwebsite21)) |
 | Undo the installation | `sudo deploy/install.sh --remove` (data, releases and token stay) |
 | After a `git pull` that changes `deploy/` | `sudo deploy/install.sh` again: it installs the receiver's script to `/usr/local/lib/lodam/` (the receiver's user can't read a home directory) and restarts it |
+
+### Website (LOD-AM/website#21)
+After a release went live (and after "already live" and `--rollback`, so a failed hand-over is
+retried by the next run), `scripts/publish_website.sh` pushes its publications to the branch
+`data-release` of LOD-AM/website: `data/published/*.ttl` exactly as in `releases/live/` (a
+publication no longer released is removed) and `data/release-manifest.json`. A workflow there
+checks the files against the manifest, adds AAT labels and a changelog entry and opens a pull
+request; **the owner merges it**, and the website's normal build deploys the entity pages. Nothing
+is pushed while `main` or the branch already has these publications. Only the live release leaves
+this machine, never anything else; a failure here leaves the triplestore as it is.
+
+Setup (owner, once), on the **triplestore LXC**:
+```bash
+sudo ssh-keygen -t ed25519 -N '' -C lodam-website -f /root/.ssh/lodam-website
+sudo cat /root/.ssh/lodam-website.pub
+```
+In LOD-AM/website → Settings → Deploy keys → Add: that public key, title `triplestore LXC`,
+**Allow write access**. In the same repository: Settings → Actions → General → Workflow permissions
+→ tick **Allow GitHub Actions to create and approve pull requests** (the workflow opens the PR), and
+Settings → Rules → a ruleset for `main` with **Require a pull request before merging** (a deploy key
+with write access could otherwise push to `main` too; you still merge pull requests as usual, and can
+add yourself to the ruleset's bypass list if you push to `main` directly). Then in this
+checkout's `.env`: `LODAM_WEBSITE_REPO=git@github.com:LOD-AM/website.git`, and test it:
+```bash
+sudo scripts/publish_website.sh
+```
+GitHub's host key is pinned in `deploy/github_known_hosts`. Revoke the hand-over: delete the deploy key.
 
 ## Environment Variables
 
@@ -345,7 +374,8 @@ configuration, loads the knowledge-graph data and runs `scripts/smoke_test.sh`.
 It also checks that `scripts/reindex.sh` removes stale index entries, the migration to named
 graphs, the release update (`LODAM_TEST=1 scripts/test_update_published.sh`: new release, already
 live, replaced, four kinds of rejected release, put back after a failure, rollback), the webhook
-receiver (`deploy/test_webhook.sh`), shellcheck, and that a slow query is stopped by the timeout
+receiver (`deploy/test_webhook.sh`), the hand-over to the website (`scripts/test_publish_website.sh`,
+against a local stand-in repository), shellcheck, and that a slow query is stopped by the timeout
 (on the CI container only). `scripts/test_update_published.sh` writes to Fuseki: never run it on
 production.
 The smoke test never writes: its write probe sends invalid Turtle, so it is
