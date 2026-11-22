@@ -102,6 +102,10 @@ jobs:
       - name: Webhook receiver
         run: bash deploy/test_webhook.sh
 
+      # website#21: the live release goes to the website's branch data-release (local stand-in repo)
+      - name: Hand-over to the website (publish_website.sh)
+        run: bash scripts/test_publish_website.sh
+
       - name: Shell scripts (shellcheck, preinstalled on ubuntu-latest)
         run: shellcheck -S warning scripts/*.sh deploy/*.sh
 
