@@ -21,5 +21,6 @@ fuseki-data/
 *.swp
 *.swo
 
-# Releases fetched from LOD-AM/pipeline (scripts/update_published.sh): incoming, live, previous
+# Releases fetched from LOD-AM/pipeline (scripts/update_published.sh): incoming, live, previous;
+# releases/knowledge-graph/: the same for knowledge-graph main (scripts/update_kg.sh)
 releases/

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Install (or update) the release update on the triplestore LXC (LOD-AM/planning#7): the webhook
-# receiver, the update service with its path unit (webhook) and daily timer (fallback).
+# receiver, the update service with its path unit (webhook) and daily timer (fallback), the daily
+# knowledge-graph update (planning#35), and the alert unit that mails the owner when one of them
+# fails (planning#34).
 # Usage: sudo deploy/install.sh            (from this checkout; run again after changes in deploy/)
 #        sudo deploy/install.sh --remove   (removes the units; releases/, the token and the data stay)
 # Creates /etc/lodam/webhook-token on the first run and prints it once: it goes into the pipeline's
@@ -9,10 +11,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DIR=$PWD
 UNITS=${SYSTEMD_UNIT_DIR:-/etc/systemd/system}
-NAMES="lodam-webhook.service lodam-update-published.service lodam-update-published.path lodam-update-published.timer"
+NAMES="lodam-webhook.service lodam-update-published.service lodam-update-published.path lodam-update-published.timer lodam-update-kg.service lodam-update-kg.timer lodam-alert@.service"
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
 if [ "${1:-}" = --remove ]; then
-  systemctl disable --now lodam-webhook.service lodam-update-published.path lodam-update-published.timer 2>/dev/null || true
+  systemctl disable --now lodam-webhook.service lodam-update-published.path lodam-update-published.timer lodam-update-kg.timer 2>/dev/null || true
   for u in $NAMES; do rm -f "$UNITS/$u"; done
   rm -f /usr/local/lib/lodam/webhook.py; rmdir /usr/local/lib/lodam 2>/dev/null || true
   systemctl daemon-reload
@@ -20,11 +22,13 @@ if [ "${1:-}" = --remove ]; then
   exit 0
 fi
 [[ $DIR != *[[:space:]]* ]] || { echo "FAIL: the checkout path must not contain spaces: $DIR" >&2; exit 1; }
-for cmd in docker rsync ssh python3 curl flock; do
+for cmd in docker rsync ssh python3 curl flock git tar; do
   command -v "$cmd" > /dev/null || { echo "FAIL: $cmd not installed (apt install $cmd)" >&2; exit 1; }
 done
 grep -q '^LODAM_RELEASE_SOURCE=.' .env 2>/dev/null \
   || echo "note: LODAM_RELEASE_SOURCE is not set in .env yet; updates fail until it is (README, Releases)"
+grep -qE '^(LODAM_ALERT_EMAIL_TO|WATCHTOWER_NOTIFICATION_EMAIL_TO)=.' .env 2>/dev/null \
+  || echo "note: no alert recipient in .env; failures are not mailed (README, Alerts)"
 
 install -d -m 700 /etc/lodam
 if [ ! -s /etc/lodam/webhook-token ]; then
@@ -37,11 +41,11 @@ fi
 install -D -o root -g root -m 755 deploy/webhook.py /usr/local/lib/lodam/webhook.py
 for u in $NAMES; do sed "s|@DIR@|$DIR|g" "deploy/$u" > "$UNITS/$u"; done
 systemctl daemon-reload
-systemctl enable --now lodam-webhook.service lodam-update-published.path lodam-update-published.timer
+systemctl enable --now lodam-webhook.service lodam-update-published.path lodam-update-published.timer lodam-update-kg.timer
 systemctl restart lodam-webhook.service        # picks up a new script or token on a re-run
 sleep 1
 systemctl is-active --quiet lodam-webhook.service \
   || { echo "FAIL: lodam-webhook did not stay up; see: sudo journalctl -u lodam-webhook -e" >&2; exit 1; }
 systemctl --no-pager --lines=0 status lodam-webhook.service | head -3
-systemctl list-timers lodam-update-published.timer --no-pager
+systemctl list-timers lodam-update-published.timer lodam-update-kg.timer --no-pager
 echo "installed. Update now: sudo systemctl start --no-block lodam-update-published; log: sudo journalctl -u lodam-update-published -f"

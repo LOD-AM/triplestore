@@ -46,9 +46,11 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
    - SPARQL endpoint (public, read-only): http://localhost:3030/LOD-AM/sparql
    - Graph Store (read-write, **admin login required**): http://localhost:3030/LOD-AM/data
 
-5. **Load the knowledge graph** (from a checkout of [LOD-AM/knowledge-graph](https://github.com/LOD-AM/knowledge-graph)):
+5. **Load the knowledge graph** (on the server: `sudo scripts/update_kg.sh` fetches it from GitHub,
+   see [Knowledge graph](#knowledge-graph-lod-amplanning35); by hand, from a checkout of
+   [LOD-AM/knowledge-graph](https://github.com/LOD-AM/knowledge-graph)):
    ```bash
-   scripts/load.sh --replace ../knowledge-graph/data ../knowledge-graph/examples
+   scripts/load.sh --replace ../knowledge-graph/data
    ```
    The data goes into the named graph `https://lod-am.net/graph/knowledge-graph` (see
    [Named graphs](#named-graphs)); `--replace` empties it first, so it then holds exactly these files.
@@ -147,7 +149,7 @@ All data sits in named graphs (owner, 2026-11-22, LOD-AM/planning#7):
 
 | Graph | Contents | Loaded by |
 |---|---|---|
-| `https://lod-am.net/graph/knowledge-graph` | LOD-AM/knowledge-graph `data/` + `examples/` | `scripts/load.sh` (by hand) |
+| `https://lod-am.net/graph/knowledge-graph` | LOD-AM/knowledge-graph `data/` (not `examples/`: owner, 2026-11-22), plus a description of which commit is live | `scripts/update_kg.sh`, daily ([Knowledge graph](#knowledge-graph-lod-amplanning35)) |
 | `https://lod-am.net/graph/published` | the publications the owner released, from LOD-AM/pipeline, plus a description of which release is live | `scripts/update_published.sh` ([Releases](#releases)) |
 
 The dataset has `tdb:unionDefaultGraph true` (`fuseki-config/assembler.ttl`): **a query without
@@ -237,7 +239,7 @@ Finally, in the pipeline's `.env` on the data LXC:
 | Update now | `sudo systemctl start --no-block lodam-update-published` |
 | Load even if already live | `sudo scripts/update_published.sh --force` |
 | Back to the previous release | `sudo scripts/update_published.sh --rollback` |
-| Log | `sudo journalctl -u lodam-update-published -e` (and `-u lodam-webhook`) |
+| Log | `sudo journalctl -u lodam-update-published -e` (and `-u lodam-webhook`); a failed run is mailed ([Alerts](#alerts-lod-amplanning34)) |
 | Which release is live | `cat releases/live/manifest.sha256`, or the SPARQL query above |
 | Hand the live release to the website again | `sudo scripts/publish_website.sh` ([Website](#website-lod-amwebsite21)) |
 | Undo the installation | `sudo deploy/install.sh --remove` (data, releases and token stay) |
@@ -269,6 +271,66 @@ checkout's `.env`: `LODAM_WEBSITE_REPO=git@github.com:LOD-AM/website.git`, and t
 sudo scripts/publish_website.sh
 ```
 GitHub's host key is pinned in `deploy/github_known_hosts`. Revoke the hand-over: delete the deploy key.
+
+## Knowledge graph (LOD-AM/planning#35)
+`scripts/update_kg.sh` keeps `https://lod-am.net/graph/knowledge-graph` at knowledge-graph `main`,
+daily at 05:17 (`lodam-update-kg.timer`), so a merge there is live by the next morning:
+
+1. **Fetch** `main` (public, shallow `git fetch` into `releases/knowledge-graph/repo`).
+2. **Changed?** Only `data/` goes in (owner, 2026-11-22: `examples/` stays out of the public graph).
+   If `data/` is the same as the live one (git tree hash), nothing happens: a commit that changes
+   only docs, tools or examples loads nothing.
+3. **Gate:** every GitHub check of that commit must have passed (read from the GitHub API without
+   a token). While checks are still running, the run ends quietly and the next one loads it; a
+   failed check is a failure (mailed, [Alerts](#alerts-lod-amplanning34)) and loads nothing.
+4. **Parse** every `data/**/*.ttl` with Jena's riot (as for releases), plus the graph's description:
+   `dcterms:identifier` and `dcterms:source` name the commit, `dcterms:modified` when it was loaded.
+5. **Load** in **one** Graph Store `PUT`, then the triple count must match, then reindex and smoke
+   test. Any failure puts back the graph as it was just before (a copy taken right before the `PUT`).
+6. `releases/knowledge-graph/live/` = the loaded graph, `previous/` = the one before.
+
+It shares the lock with `scripts/update_published.sh` (both reindex, which stops Fuseki) and waits
+for a running release update instead of skipping. The first run replaces the graph loaded by hand
+(664 triples with `examples/`) with `data/` only (339 triples at knowledge-graph `2f7bcdb`).
+
+| | |
+|---|---|
+| Update now | `sudo systemctl start --no-block lodam-update-kg` |
+| Load even if already live | `sudo scripts/update_kg.sh --force` |
+| Back to the previous one | `sudo scripts/update_kg.sh --rollback` |
+| Log | `sudo journalctl -u lodam-update-kg -e` |
+| Which commit is live | `cat releases/knowledge-graph/live/commit`, or `SELECT ?p ?o WHERE { <https://lod-am.net/graph/knowledge-graph> ?p ?o }` |
+
+The pipeline's `KG_COMMIT` (shapes and vocabularies of a release) stays a deliberate bump by hand in
+LOD-AM/pipeline. So for a while the graph can be newer than the knowledge-graph commit a release was
+checked against.
+
+## Alerts (LOD-AM/planning#34)
+A failed run mails the owner: `lodam-update-published.service` (a rejected release, a failed load,
+reindex, smoke test or hand-over to the website), `lodam-update-kg.service` (failed checks of a new
+knowledge-graph commit, a parse error, a failed load) and `lodam-webhook.service` (only when it keeps
+crashing: 5 failures within 10 minutes) have `OnFailure=lodam-alert@%n.service`, which runs
+`deploy/alert.sh`. The mail holds the unit's status and its last 60 journal lines; Fuseki keeps
+serving a fully checked release in every case. Normal runs, "already live" and "another update is in
+progress" send nothing. The same script runs on the data LXC for the pipeline (LOD-AM/pipeline
+`deploy/README.md`).
+
+It sends over SMTP with `curl` (TLS required; port 465 = implicit TLS, otherwise STARTTLS), so no
+mail server is needed. Without new settings it uses **Watchtower's SMTP account** from `.env`
+(`WATCHTOWER_NOTIFICATION_EMAIL_*`); `LODAM_ALERT_*` lines (`.env.example`) override it, e.g. another
+recipient. Setup and test (owner, once):
+```bash
+git pull && sudo deploy/install.sh            # installs lodam-alert@.service and the OnFailure= lines
+sudo deploy/alert.sh --test                   # a test mail: checks the SMTP settings
+# a deliberately failing run, through the same OnFailure= path (mail "lodam-alert-check.service failed"):
+sudo systemd-run --unit=lodam-alert-check -p OnFailure=lodam-alert@lodam-alert-check.service /bin/false
+sudo journalctl -u 'lodam-alert@*' -e          # what the alert unit did
+```
+The website's workflows are covered by GitHub's own failure mails (github.com → Settings →
+Notifications → Actions: "Only notify for failed workflows"): `data release` runs as the owner (the
+deploy-key push counts as theirs), and so does `build` on `main` after a merge. The one exception is the
+`build` that `data release` starts on the branch: it runs as `github-actions[bot]`, so no mail. Its
+failure shows as a red check on the "Data release" pull request, and nothing goes live until that PR is merged.
 
 ## Environment Variables
 
@@ -324,7 +386,7 @@ Decisions for the production server (triple.lod-am.net), with the issues they co
 - **No backups of the triplestore itself** (#4). The store holds no data of its
   own: everything comes from the owner's relational database (backed up
   separately) via the converter, and from LOD-AM/knowledge-graph. The
-  whole-machine backup covers the rest. To restore, reload with `scripts/load.sh` and
+  whole-machine backup covers the rest. To restore, reload with `sudo scripts/update_kg.sh --force` and
   `sudo scripts/update_published.sh --force`
   instead of relying on a copy of `fuseki-data/`: TDB files copied while Fuseki
   is running are not guaranteed to be consistent.
@@ -374,9 +436,10 @@ configuration, loads the knowledge-graph data and runs `scripts/smoke_test.sh`.
 It also checks that `scripts/reindex.sh` removes stale index entries, the migration to named
 graphs, the release update (`LODAM_TEST=1 scripts/test_update_published.sh`: new release, already
 live, replaced, four kinds of rejected release, put back after a failure, rollback), the webhook
-receiver (`deploy/test_webhook.sh`), the hand-over to the website (`scripts/test_publish_website.sh`,
+receiver (`deploy/test_webhook.sh`), the alert mail (`deploy/test_alert.sh`, curl stubbed), the knowledge-graph update
+(`LODAM_TEST=1 scripts/test_update_kg.sh`: first load, unchanged, checks running/failed, parse error, put back, rollback), the hand-over to the website (`scripts/test_publish_website.sh`,
 against a local stand-in repository), shellcheck, and that a slow query is stopped by the timeout
 (on the CI container only). `scripts/test_update_published.sh` writes to Fuseki: never run it on
-production.
+production; nor `scripts/test_update_kg.sh`.
 The smoke test never writes: its write probe sends invalid Turtle, so it is
 safe to run against production.

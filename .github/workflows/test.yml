@@ -99,8 +99,17 @@ jobs:
       - name: Release update (update_published.sh)
         run: LODAM_TEST=1 scripts/test_update_published.sh knowledge-graph/data/vocab/topics.ttl
 
+      # planning#35: knowledge-graph main (data/ only) into its graph, gated by its checks; a local
+      # stand-in repository replaces GitHub
+      - name: Knowledge-graph update (update_kg.sh)
+        run: LODAM_TEST=1 scripts/test_update_kg.sh knowledge-graph
+
       - name: Webhook receiver
         run: bash deploy/test_webhook.sh
+
+      # planning#34: the failure mail (curl, systemctl and journalctl stubbed)
+      - name: Alert mail
+        run: bash deploy/test_alert.sh
 
       # website#21: the live release goes to the website's branch data-release (local stand-in repo)
       - name: Hand-over to the website (publish_website.sh)

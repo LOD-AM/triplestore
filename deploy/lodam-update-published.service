@@ -7,6 +7,8 @@ Description=LOD-AM: load a new checked release into <https://lod-am.net/graph/pu
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
+# A failed run mails the owner (deploy/alert.sh, planning#34)
+OnFailure=lodam-alert@%n.service
 
 [Service]
 Type=oneshot

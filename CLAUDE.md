@@ -12,7 +12,7 @@ public later).
 - `fuseki-config/assembler.ttl`: dataset **LOD-AM**, TDB1 at `/fuseki-base/databases/tdb`,
   endpoints `/LOD-AM/sparql` + `/LOD-AM/query` (read) and `/LOD-AM/data` (Graph Store, **read-write**). No reasoning.
   **Named graphs only** with `tdb:unionDefaultGraph true` (owner, 2026-11-22, planning#7): `…/graph/knowledge-graph`
-  (`load.sh`) and `…/graph/published` (`update_published.sh`); queries without FROM see both; never load `?default`.
+  (`update_kg.sh`: knowledge-graph `data/` only, no `examples/`, owner 2026-11-22) and `…/graph/published` (`update_published.sh`); queries without FROM see both; never load `?default`.
   Wrapped in a `text:TextDataset` (Lucene label index at `/fuseki-base/databases/lucene`, planning#31) that also
   carries the query timeout `10000,120000` (planning#30). The timeout must stay on that dataset: the image's
   `QUERY_TIMEOUT`/`config.ttl` and `ja:context` on the service have no effect (tested with the 6.2.0 jar).
@@ -24,7 +24,11 @@ public later).
   data LXC (rsync over SSH, `rrsync -ro`), check it against its manifest, load it in one PUT, reindex, smoke test,
   put the old one back on failure; `--rollback`. `deploy/`: webhook receiver (`webhook.py`, port 9300), systemd units,
   `install.sh`. `scripts/migrate_named_graphs.sh`: one-time move from the default graph (planning#7)
-- `scripts/load.sh`: load Turtle into a named graph via the Graph Store; `scripts/smoke_test.sh`: health, public query, write protection,
+- `scripts/update_kg.sh` (planning#35): daily, knowledge-graph `main` `data/` into its graph if `data/` changed and the
+  commit's GitHub checks passed; one PUT, reindex, smoke test, put back on failure; `--rollback`. Shares the lock with
+  `update_published.sh` (waits). `deploy/alert.sh` + `lodam-alert@.service` (planning#34): `OnFailure=` of every unit
+  mails the owner (curl SMTP; LODAM_ALERT_* or Watchtower's settings); identical copy in LOD-AM/pipeline
+- `scripts/load.sh`: load Turtle into a named graph via the Graph Store (by hand); `scripts/smoke_test.sh`: health, public query, write protection,
   text search (never writes); `scripts/reindex.sh`: rebuild the text index (stops Fuseki briefly). Needed after
   `load.sh --replace`, because clearing a graph leaves its labels in the index
 
@@ -71,7 +75,10 @@ running server are only verified once the owner has deployed them
   ACCEPT above DROP) starts `lodam-update-published`; daily fallback 05:47. After a live release,
   `scripts/publish_website.sh` (#18) pushes it to the website's branch `data-release` (deploy key
   `/root/.ssh/lodam-website`, `LODAM_WEBSITE_REPO` in `.env`); the website workflow opens the PR.
-  Logs: `sudo journalctl -u lodam-update-published -e`, `-u lodam-webhook`. No alerts on failure yet (planning#34).
+  Logs: `sudo journalctl -u lodam-update-published -e`, `-u lodam-webhook`, `-u lodam-update-kg`.
+- **New, not yet deployed (planning#34, #35):** alerts on failure and the daily knowledge-graph update. The owner
+  runs `git pull && sudo deploy/install.sh`, `sudo deploy/alert.sh --test`, the failing run of README "Alerts", then
+  `sudo systemctl start lodam-update-kg` (the graph goes from 664 to 339 triples: `examples/` leaves).
 - Server checkout: `~/triplestore` on the LXC, `.env` in use. `~/triplestore-old` (old database) is kept for
   rollback until the owner removes it. Owner to-dos: LOD-AM/planning#33 (e.g. rotate the webhook token).
 - Deploy pitfalls seen so far (all in README Troubleshooting): a missing `fuseki-data/` (now refused by
@@ -80,7 +87,7 @@ running server are only verified once the owner has deployed them
   `sudo deploy/install.sh` after changes in `deploy/`). A config change only takes effect after
   `sudo docker compose up -d --force-recreate fuseki`; ask the owner to confirm that step.
 - After every `scripts/load.sh --replace`: `sudo scripts/reindex.sh` (clearing a graph leaves stale index entries).
-- `scripts/test_update_published.sh` writes to Fuseki: CI/local only, never production.
+- `scripts/test_update_published.sh` and `scripts/test_update_kg.sh` write to Fuseki: CI/local only, never production.
 - Server decisions (owner, 2026-11-21; README "Server setup"): a dedicated LXC on Proxmox that runs only this
   stack, so Watchtower stays host-wide (#6); the proxy runs on another VM, so port 3030 can't be
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
