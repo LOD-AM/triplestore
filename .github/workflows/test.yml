@@ -2,7 +2,7 @@ name: test
 
 # Starts the real Fuseki container with this repo's config, loads the
 # knowledge-graph data and runs the smoke test (health, public query,
-# write protection).
+# write protection), the named-graph migration, the release update and the webhook.
 on:
   pull_request:
   push:
@@ -83,6 +83,27 @@ jobs:
           test "$(hits zzstalelabel)" = 0 && echo "ok: stale label gone after reindex"
           test "$(hits 'spear*')" -ge 1 && echo "ok: knowledge-graph labels found after reindex"
           scripts/smoke_test.sh --min-triples 100
+
+      # planning#7: named graphs + union default graph. The migration (knowledge graph into its
+      # named graph, stored default graph deleted) with the real reindex.sh
+      - name: Migration to named graphs
+        run: |
+          scripts/migrate_named_graphs.sh knowledge-graph/data knowledge-graph/examples
+          n=$(curl -s -G -H 'Accept: text/csv' --data-urlencode \
+            'query=SELECT (COUNT(*) AS ?n) WHERE { GRAPH <https://lod-am.net/graph/knowledge-graph> { ?s ?p ?o } }' \
+            http://localhost:3030/LOD-AM/sparql | tail -n 1 | tr -d '\r')
+          test "$n" -ge 100 && echo "ok: knowledge graph in its named graph ($n triples)"
+
+      # planning#7: pull, check, load and swap a release, with riot from the Fuseki image and the
+      # real reindex.sh; fake releases built from a public knowledge-graph file (no blank nodes)
+      - name: Release update (update_published.sh)
+        run: LODAM_TEST=1 scripts/test_update_published.sh knowledge-graph/data/vocab/topics.ttl
+
+      - name: Webhook receiver
+        run: bash deploy/test_webhook.sh
+
+      - name: Shell scripts (shellcheck, preinstalled on ubuntu-latest)
+        run: shellcheck -S warning scripts/*.sh deploy/*.sh
 
       # planning#30: 10 s to the first result. A cross join over all triples
       # takes far longer, so it must be cut off with 503 after about 10 s.
