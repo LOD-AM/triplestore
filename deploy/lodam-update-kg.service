@@ -1,0 +1,16 @@
+# Load knowledge-graph main (data/) into <https://lod-am.net/graph/knowledge-graph> when it changed
+# and its checks passed (LOD-AM/planning#35). Started by lodam-update-kg.timer, or by hand:
+#   sudo systemctl start --no-block lodam-update-kg
+# Installed by deploy/install.sh, which fills in @DIR@. Logs: sudo journalctl -u lodam-update-kg
+[Unit]
+Description=LOD-AM: load knowledge-graph main into <https://lod-am.net/graph/knowledge-graph> (planning#35)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+# A failed run (failed checks, a parse error, a failed load) mails the owner (deploy/alert.sh, planning#34)
+OnFailure=lodam-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=@DIR@/scripts/update_kg.sh
+TimeoutStartSec=1h

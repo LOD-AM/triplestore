@@ -1,0 +1,13 @@
+# Daily check for a new knowledge-graph main (LOD-AM/planning#35): "a merge is live by the next day".
+# 05:17, between the pipeline's release (03:17, ~40 min) and the release fallback (05:47); both
+# scripts share a lock, so they never reindex at the same time. Unchanged data/ costs one git fetch.
+[Unit]
+Description=Daily LOD-AM knowledge-graph update (planning#35)
+
+[Timer]
+OnCalendar=*-*-* 05:17
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

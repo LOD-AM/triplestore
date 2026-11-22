@@ -99,6 +99,11 @@ jobs:
       - name: Release update (update_published.sh)
         run: LODAM_TEST=1 scripts/test_update_published.sh knowledge-graph/data/vocab/topics.ttl
 
+      # planning#35: knowledge-graph main (data/ only) into its graph, gated by its checks; a local
+      # stand-in repository replaces GitHub
+      - name: Knowledge-graph update (update_kg.sh)
+        run: LODAM_TEST=1 scripts/test_update_kg.sh knowledge-graph
+
       - name: Webhook receiver
         run: bash deploy/test_webhook.sh
 
