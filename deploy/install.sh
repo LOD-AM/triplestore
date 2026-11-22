@@ -14,6 +14,7 @@ NAMES="lodam-webhook.service lodam-update-published.service lodam-update-publish
 if [ "${1:-}" = --remove ]; then
   systemctl disable --now lodam-webhook.service lodam-update-published.path lodam-update-published.timer 2>/dev/null || true
   for u in $NAMES; do rm -f "$UNITS/$u"; done
+  rm -f /usr/local/lib/lodam/webhook.py; rmdir /usr/local/lib/lodam 2>/dev/null || true
   systemctl daemon-reload
   echo "removed the units (releases/, /etc/lodam/webhook-token and Fuseki's data stay)"
   exit 0
@@ -28,12 +29,19 @@ grep -q '^LODAM_RELEASE_SOURCE=.' .env 2>/dev/null \
 install -d -m 700 /etc/lodam
 if [ ! -s /etc/lodam/webhook-token ]; then
   (umask 077; python3 -c "import secrets; print(secrets.token_hex(32))" > /etc/lodam/webhook-token)
-  echo "new webhook token (put it into the pipeline's .env on the data LXC as LODAM_RELEASE_WEBHOOK_TOKEN=):"
+  echo "new webhook token; in the pipeline's .env on the data LXC write: LODAM_RELEASE_WEBHOOK_TOKEN=<this value>"
   cat /etc/lodam/webhook-token
 fi
+# The receiver runs as an unprivileged dynamic user: give it a root-owned, world-readable copy of its
+# script, outside the checkout (a home directory is usually not readable for other users)
+install -D -o root -g root -m 755 deploy/webhook.py /usr/local/lib/lodam/webhook.py
 for u in $NAMES; do sed "s|@DIR@|$DIR|g" "deploy/$u" > "$UNITS/$u"; done
 systemctl daemon-reload
 systemctl enable --now lodam-webhook.service lodam-update-published.path lodam-update-published.timer
+systemctl restart lodam-webhook.service        # picks up a new script or token on a re-run
+sleep 1
+systemctl is-active --quiet lodam-webhook.service \
+  || { echo "FAIL: lodam-webhook did not stay up; see: sudo journalctl -u lodam-webhook -e" >&2; exit 1; }
 systemctl --no-pager --lines=0 status lodam-webhook.service | head -3
 systemctl list-timers lodam-update-published.timer --no-pager
 echo "installed. Update now: sudo systemctl start --no-block lodam-update-published; log: sudo journalctl -u lodam-update-published -f"
