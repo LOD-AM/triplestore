@@ -69,16 +69,17 @@ running server are only verified once the owner has deployed them
 - **Live on the server (verified by the owner):** Fuseki 6.2.0 with the secured `shiro.ini` (#3), query
   timeout `10000,120000` (planning#30), Lucene label index (planning#31; #12), `fuseki-config/` owned by the
   owner's user with group 9008 + `group_add` (#13). **Named graphs + union default graph** (planning#7, #16):
-  `…/graph/knowledge-graph` 664 triples (loaded by hand; automating it: planning#35), `…/graph/published` 6234
-  (release `7b55606a…`), union 6883; smoke test passes incl. text search.
+  `…/graph/knowledge-graph` 339 triples (knowledge-graph `2f7bcdb`, `data/` only, by `update_kg.sh`), `…/graph/published`
+  6234 (release `7b55606a…`), union 6573; smoke test passes incl. text search (owner, 2026-11-22 18:57).
 - **Release chain live (2026-11-22):** the pipeline's webhook (port 9300, Proxmox: only from the data LXC,
   ACCEPT above DROP) starts `lodam-update-published`; daily fallback 05:47. After a live release,
   `scripts/publish_website.sh` (#18) pushes it to the website's branch `data-release` (deploy key
   `/root/.ssh/lodam-website`, `LODAM_WEBSITE_REPO` in `.env`); the website workflow opens the PR.
   Logs: `sudo journalctl -u lodam-update-published -e`, `-u lodam-webhook`, `-u lodam-update-kg`.
-- **New, not yet deployed (planning#34, #35):** alerts on failure and the daily knowledge-graph update. The owner
-  runs `git pull && sudo deploy/install.sh`, `sudo deploy/alert.sh --test`, the failing run of README "Alerts", then
-  `sudo systemctl start lodam-update-kg` (the graph goes from 664 to 339 triples: `examples/` leaves).
+- **Live since 2026-11-22 (planning#34, #35, #20):** failure mails (test mail and the deliberately failing run arrived,
+  via Watchtower's SMTP account) and the daily knowledge-graph update (`lodam-update-kg.timer` 05:17).
+- Pitfall: a root-owned file in `.git/objects` (an earlier `sudo git …`) blocked `git pull`; fix:
+  `sudo chown -R <owner>: .git`. Never run git with sudo in the checkout (the scripts use their own repos in `releases/`).
 - Server checkout: `~/triplestore` on the LXC, `.env` in use. `~/triplestore-old` (old database) is kept for
   rollback until the owner removes it. Owner to-dos: LOD-AM/planning#33 (e.g. rotate the webhook token).
 - Deploy pitfalls seen so far (all in README Troubleshooting): a missing `fuseki-data/` (now refused by
