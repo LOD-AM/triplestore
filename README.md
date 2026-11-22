@@ -420,6 +420,11 @@ sudo docker compose up -d --force-recreate fuseki
 The same error with `/fuseki-base/configuration` means `fuseki-config/` lacks
 group write for 9008. Use the `fuseki-config` line of Quick Start step 1, then recreate.
 
+### `git pull`: `insufficient permission for adding an object to repository database .git/objects`
+A git command was once run with `sudo` in the checkout and left root-owned files in `.git`. Give
+them back (`fuseki-config/` keeps its group): `sudo chown -R "$USER": .git`, then `git pull`. Don't
+run git with `sudo` here; the scripts use their own repositories in `releases/`.
+
 ### `git pull`: `unable to unlink old 'fuseki-config/assembler.ttl': Permission denied`
 `fuseki-config/` still belongs to UID 9008 (the setup before 2026-11-21). Give it
 back to your user with group access for Fuseki (Quick Start step 1), then pull again:
