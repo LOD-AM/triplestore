@@ -239,6 +239,7 @@ Finally, in the pipeline's `.env` on the data LXC:
 | Log | `sudo journalctl -u lodam-update-published -e` (and `-u lodam-webhook`) |
 | Which release is live | `cat releases/live/manifest.sha256`, or the SPARQL query above |
 | Undo the installation | `sudo deploy/install.sh --remove` (data, releases and token stay) |
+| After a `git pull` that changes `deploy/` | `sudo deploy/install.sh` again: it installs the receiver's script to `/usr/local/lib/lodam/` (the receiver's user can't read a home directory) and restarts it |
 
 ## Environment Variables
 
