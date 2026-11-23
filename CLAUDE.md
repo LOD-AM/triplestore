@@ -3,9 +3,10 @@
 Docker Compose deployment of the LOD-AM triplestore on the owner's homelab
 server: Apache Jena Fuseki (`secoresearch/fuseki` image) plus Watchtower for
 automatic image updates. It serves the data from `LOD-AM/knowledge-graph`.
-Public name `triple.lod-am.net`, behind the owner's Nginx Proxy Manager, which
-currently requires authentication for everything (querying is meant to become
-public later).
+Public name `triple.lod-am.net`, behind the owner's Nginx Proxy Manager. Querying is public
+(owner, 2026-11-23, planning#24; checked from outside: `/LOD-AM/sparql` answers without login,
+CORS allows `https://lod-am.net`, `/LOD-AM/data` and `/$/` answer 401). The website's query editor
+(`lod-am.net/query/`, LOD-AM/website#57) sends queries here.
 
 ## Files
 - `docker-compose.yml`: services `fuseki` (port 3030, network `lod-am-network`) and `watchtower`; logs capped at
@@ -95,8 +96,8 @@ running server are only verified once the owner has deployed them
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
   (LOD-AM/planning#29, ACCEPT above DROP); no triplestore backups, the
   sources are the relational DB and knowledge-graph plus the whole-machine backup, restore = reload (#4).
-- Before querying goes public: the proxy authenticates only writes/admin, and the
-  website privacy policy covers `triple.lod-am.net` (LOD-AM/website#20).
+- Querying is public since 2026-11-23. The website privacy policy must cover `triple.lod-am.net`
+  (owner; draft in LOD-AM/website#57), including how long the capped Fuseki log keeps query texts.
 - Dependabot PRs: check the Jena release notes (TDB1) and let CI pass.
 
 ## LOD-AM project (shared block: keep identical in every repo)
