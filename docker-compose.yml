@@ -1,11 +1,23 @@
 # LOD-AM triplestore. Configuration comes from ./.env (see .env.example);
 # docker compose reads it automatically, no exports or `sudo -E` needed.
+
+# Container logs are capped (website PR LOD-AM/website#57, privacy policy): Fuseki logs the
+# text of every query (not the client's IP, which only the proxy sees). Without a cap, Docker's
+# json-file log keeps everything until the container is recreated. Here each container keeps at
+# most 5 files of 10 MB; the oldest lines are dropped first. `docker logs` works as before.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   fuseki:
     # Pinned: update via Dependabot PRs. Version = Apache Jena Fuseki version.
     image: secoresearch/fuseki:6.2.0
     container_name: lod-am-fuseki
     restart: unless-stopped
+    logging: *logging
     # The image runs as UID 9008 with group 0. Group 9008 lets it write to
     # fuseki-config/, which Fuseki requires at start ("Not writable"), while
     # the folder and its files stay owned by the checkout's user, so git pull
@@ -51,6 +63,7 @@ services:
     image: nickfedor/watchtower:1.24.0
     container_name: watchtower
     restart: unless-stopped
+    logging: *logging
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:

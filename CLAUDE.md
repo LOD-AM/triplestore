@@ -8,7 +8,8 @@ currently requires authentication for everything (querying is meant to become
 public later).
 
 ## Files
-- `docker-compose.yml`: services `fuseki` (port 3030, network `lod-am-network`) and `watchtower`
+- `docker-compose.yml`: services `fuseki` (port 3030, network `lod-am-network`) and `watchtower`; logs capped at
+  5 × 10 MB per container (Fuseki logs query texts; website privacy policy, LOD-AM/website#57)
 - `fuseki-config/assembler.ttl`: dataset **LOD-AM**, TDB1 at `/fuseki-base/databases/tdb`,
   endpoints `/LOD-AM/sparql` + `/LOD-AM/query` (read) and `/LOD-AM/data` (Graph Store, **read-write**). No reasoning.
   **Named graphs only** with `tdb:unionDefaultGraph true` (owner, 2026-11-22, planning#7): `…/graph/knowledge-graph`

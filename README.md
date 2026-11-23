@@ -392,6 +392,11 @@ Decisions for the production server (triple.lod-am.net), with the issues they co
   is running are not guaranteed to be consistent.
   Consequence: **don't edit data only in the triplestore** (web UI upload or
   Graph Store writes that exist nowhere else). Change the sources and reload.
+- **Container logs are capped** (LOD-AM/website#57): Fuseki logs the text of every query
+  (with time, without the client's IP, which only the proxy sees), and the website's privacy
+  policy names how long that is kept. `docker-compose.yml` limits each container's log to
+  5 files of 10 MB (`json-file` driver); the oldest lines are dropped first, and recreating the
+  container drops the log entirely. Check: `sudo docker inspect -f '{{.HostConfig.LogConfig}}' lod-am-fuseki`.
 
 ## Architecture
 
