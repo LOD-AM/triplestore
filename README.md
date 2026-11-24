@@ -453,3 +453,7 @@ against a local stand-in repository), shellcheck, and that a slow query is stopp
 production; nor `scripts/test_update_kg.sh`.
 The smoke test never writes: its write probe sends invalid Turtle, so it is
 safe to run against production.
+
+## Licence
+[MIT](LICENSE) for the configuration and scripts in this repository (owner, 2026-11-24). The data
+it serves is released under CC BY 4.0; external software (Fuseki, Watchtower) has its own licence.
