@@ -4,8 +4,10 @@ Docker Compose deployment of the LOD-AM triplestore on the owner's homelab
 server: Apache Jena Fuseki (`secoresearch/fuseki` image) plus Watchtower for
 automatic image updates. It serves the data from `LOD-AM/knowledge-graph`.
 Public name `triple.lod-am.net`, behind the owner's Nginx Proxy Manager. Querying is public
-(owner, 2026-11-23, planning#24; checked from outside: `/LOD-AM/sparql` answers without login,
-CORS allows `https://lod-am.net`, `/LOD-AM/data` and `/$/` answer 401). The website's query editor
+(owner, 2026-11-23, planning#24). Since 2026-11-26 the proxy passes **only** `/LOD-AM/sparql` and
+`/LOD-AM/query`; every other path gets 403 there (planning review 2026-11-25, 5.1: Fuseki answers any
+`Origin` with credentials, so the write and admin paths must not be public). Check from anywhere:
+`scripts/smoke_test.sh --public`. Admin UI only through an SSH tunnel. The website's query editor
 (`lod-am.net/query/`, LOD-AM/website#57) sends queries here.
 
 ## Files
