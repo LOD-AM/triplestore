@@ -41,6 +41,7 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
 4. **Check it:**
    ```bash
    scripts/smoke_test.sh      # health, public query, write protection
+   scripts/smoke_test.sh --public   # from anywhere: only the query paths get through the proxy
    ```
    - Web UI: http://localhost:3030
    - SPARQL endpoint (public, read-only): http://localhost:3030/LOD-AM/sparql
@@ -69,6 +70,8 @@ Docker deployment of the LOD-AM triplestore based on [secoresearch/fuseki](https
 | `/LOD-AM/data`, `/LOD-AM` (dataset URL) | admin login (these accept writes) |
 | `/$/…` (admin UI/API) | admin login, except `/$/ping` and `/$/status` |
 | web UI static files | public |
+
+What the internet reaches is narrower: the proxy passes only the two query paths (below).
 
 The admin password comes from `FUSEKI_ADMIN_PASSWORD`. The image's entrypoint
 writes it into the `admin=` line when the container is created. After changing
@@ -371,6 +374,17 @@ Decisions for the production server (triple.lod-am.net), with the issues they co
   the proxy off. Anything that reaches `<server>:3030` directly bypasses the
   proxy's authentication, so Fuseki's own access control (`shiro.ini`) is what
   protects writes and the admin API.
+- **Only the query endpoints are public** (owner, 2026-11-26; planning review 2026-11-25, 5.1).
+  Fuseki answers CORS requests from any origin with `Access-Control-Allow-Credentials: true`, so
+  a page on any site could use a Fuseki login held by the owner's browser to write. No script needs
+  the write or admin paths from outside (all use `localhost:3030`), so the proxy host's **Advanced**
+  tab in Nginx Proxy Manager has, as its first line:
+  ```nginx
+  if ($uri !~ ^/LOD-AM/(sparql|query)$) { return 403; }
+  ```
+  The admin UI is then reached through an SSH tunnel: `ssh -L 3030:localhost:3030 <triplestore LXC>`,
+  then `http://localhost:3030`. Check from anywhere: `scripts/smoke_test.sh --public`.
+  Rollback: remove the line in the proxy host's Advanced tab.
 - **Port 3030 only from the proxy** (Proxmox firewall, LOD-AM/planning#29). The
   datacenter firewall is enabled with input policy `ACCEPT`, so it changes
   nothing for the Proxmox hosts. The LXC's firewall is enabled (options and

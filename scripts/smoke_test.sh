@@ -4,19 +4,42 @@
 # so even an unprotected server rejects it (400) without storing anything.
 #
 #   scripts/smoke_test.sh [--min-triples N]
+#   scripts/smoke_test.sh --public [URL]      the public side, from anywhere (default https://triple.lod-am.net)
 # Uses FUSEKI_URL (default http://localhost:3030) and, if set,
 # FUSEKI_ADMIN_PASSWORD (from .env) to check that the admin login works.
+# --public checks what the proxy lets through (planning review 2026-11-25, 5.1): only the query
+# endpoints answer; the Graph Store, the dataset, the admin API and the UI get 403 and never reach
+# Fuseki. The server's scripts use localhost and don't depend on this.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 [ -f .env ] && set -a && . ./.env && set +a
 URL="${FUSEKI_URL:-http://localhost:3030}"
-min=0; [ "${1:-}" = "--min-triples" ] && min="$2"
+min=0; public=""
+case "${1:-}" in
+  --min-triples) min="$2" ;;
+  --public) public="${2:-https://triple.lod-am.net}" ;;
+esac
 fail=0
 
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 check() { # name expected actual
   if [ "$3" = "$2" ]; then echo "ok   $1 ($3)"; else echo "FAIL $1: expected $2, got $3"; fail=1; fi
 }
+
+if [ -n "$public" ]; then
+  check "public query GET /LOD-AM/sparql" 200 "$(code -G --data-urlencode 'query=ASK {}' "$public/LOD-AM/sparql")"
+  check "public query POST /LOD-AM/sparql" 200 "$(code --data-urlencode 'query=ASK {}' "$public/LOD-AM/sparql")"
+  check "public query GET /LOD-AM/query" 200 "$(code -G --data-urlencode 'query=ASK {}' "$public/LOD-AM/query")"
+  check "CORS preflight from https://lod-am.net" 200 \
+    "$(code -X OPTIONS -H 'Origin: https://lod-am.net' -H 'Access-Control-Request-Method: POST' "$public/LOD-AM/sparql")"
+  for p in /LOD-AM/data /LOD-AM '/$/datasets' '/$/ping' / '/LOD-AM/sparql/../data'; do
+    check "public $p is blocked by the proxy" 403 "$(code --path-as-is "$public$p")"
+  done
+  check "public write to /LOD-AM/data is blocked by the proxy" 403 \
+    "$(code -X POST -H 'Content-Type: text/turtle' --data-binary 'invalid turtle !!!' "$public/LOD-AM/data?graph=urn:lod-am:smoke-test")"
+  [ $fail = 0 ] && echo "public side passed" || echo "public side FAILED"
+  exit $fail
+fi
 
 check "health /\$/ping" 200 "$(code "$URL/\$/ping")"
 check "public query /LOD-AM/sparql" 200 "$(code -G --data-urlencode 'query=ASK {}' "$URL/LOD-AM/sparql")"
