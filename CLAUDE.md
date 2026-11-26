@@ -69,7 +69,7 @@ running server are only verified once the owner has deployed them
 - Images are pinned. Version bumps come as Dependabot PRs: check the Jena
   release notes (TDB1 is still used) and let CI pass before merging.
 
-## Where to resume (state 2026-11-22, evening)
+## Where to resume (state 2026-11-26)
 - **Live on the server (verified by the owner):** Fuseki 6.2.0 with the secured `shiro.ini` (#3), query
   timeout `10000,120000` (planning#30), Lucene label index (planning#31; #12), `fuseki-config/` owned by the
   owner's user with group 9008 + `group_add` (#13). **Named graphs + union default graph** (planning#7, #16):
@@ -85,7 +85,7 @@ running server are only verified once the owner has deployed them
 - Pitfall: a root-owned file in `.git/objects` (an earlier `sudo git …`) blocked `git pull`; fix:
   `sudo chown -R <owner>: .git`. Never run git with sudo in the checkout (the scripts use their own repos in `releases/`).
 - Server checkout: `~/triplestore` on the LXC, `.env` in use. `~/triplestore-old` (old database) is kept for
-  rollback until the owner removes it. Owner to-dos: LOD-AM/planning#33 (e.g. rotate the webhook token).
+  rollback until the owner removes it. The webhook token was rotated (2026-11-22); open owner points: LOD-AM/planning#36.
 - Deploy pitfalls seen so far (all in README Troubleshooting): a missing `fuseki-data/` (now refused by
   `create_host_path: false`); `fuseki-config/` owned by 9008 blocked `git pull` (fixed by #13); the webhook
   receiver could not read its script in a home directory (#17: copy in `/usr/local/lib/lodam`, re-run
@@ -98,8 +98,9 @@ running server are only verified once the owner has deployed them
   localhost-only and `shiro.ini` is what protects writes (#5); Proxmox firewall rules allow 3030 only from the proxy
   (LOD-AM/planning#29, ACCEPT above DROP); no triplestore backups, the
   sources are the relational DB and knowledge-graph plus the whole-machine backup, restore = reload (#4).
-- Querying is public since 2026-11-23. The website privacy policy must cover `triple.lod-am.net`
-  (owner; draft in LOD-AM/website#57), including how long the capped Fuseki log keeps query texts.
+- Querying is public since 2026-11-23; the website privacy policy covers `triple.lod-am.net` and the capped
+  Fuseki log (LOD-AM/website#57). Since 2026-11-26 the proxy passes only the query endpoints (see the top;
+  `scripts/smoke_test.sh --public`); no rate limit (owner, planning#36).
 - Dependabot PRs: check the Jena release notes (TDB1) and let CI pass.
 
 ## LOD-AM project (shared block: keep identical in every repo)
